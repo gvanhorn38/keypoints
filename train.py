@@ -59,10 +59,10 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
       cfg.PARTS.NUM_PARTS,
       num_epochs=None,
       batch_size=cfg.BATCH_SIZE,
-      num_threads=2,
-      shuffle_batch = False,
-      capacity = 10,
-      min_after_dequeue = 96,
+      num_threads=cfg.NUM_INPUT_THREADS,
+      shuffle_batch = True,
+      capacity = cfg.QUEUE_CAPACITY,
+      min_after_dequeue = cfg.QUEUE_MIN,
       add_summaries = True,
       cfg=cfg
     )
