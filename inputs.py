@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
-def extract_crop(image, bbox):
+def extract_crop(image, bbox, pad_percentage=0.25):
   """ Extract a bounding box crop from the image.
   Args:
     image : float32 image
@@ -11,11 +11,6 @@ def extract_crop(image, bbox):
     np.array : The cropped region of the image
     np.array : The new upper left hand coordinate (x, y). This can be used to offset part locations.
   """
-
-  top_pad = 12
-  bottom_pad = 12
-  left_pad = 12
-  right_pad = 12
 
   image_height, image_width = image.shape[:2]
 
@@ -31,8 +26,10 @@ def extract_crop(image, bbox):
 
   if w > h:
 
-    new_x1 = x1 - left_pad
-    new_x2 = x2 + right_pad
+    pad = np.round(pad_percentage * w / 2.)
+
+    new_x1 = x1 - pad
+    new_x2 = x2 + pad
     new_w = np.round(new_x2 - new_x1)
     new_h = new_w
     new_y1 = center_y - new_h / 2.
@@ -40,8 +37,10 @@ def extract_crop(image, bbox):
 
   else:
 
-    new_y1 = y1 - top_pad
-    new_y2 = y2 + bottom_pad
+    pad = np.round(pad_percentage * h / 2.)
+
+    new_y1 = y1 - pad
+    new_y2 = y2 + pad
     new_h = np.round(new_y2 - new_y1)
     new_w = new_h
     new_x1 = center_x - new_w / 2.
@@ -293,7 +292,7 @@ def flip_parts_left_right(parts_x, parts_y, parts_v, left_right_pairs, num_parts
       x,y,v = flipped_parts[l]
       flipped_parts[l] = flipped_parts[r][:]
       flipped_parts[r] = [x,y,v]
-  
+      
   flipped_parts = flipped_parts.astype(np.float32)
 
   flipped_x = np.expand_dims(flipped_parts[:,0].ravel(), 0)
@@ -301,3 +300,11 @@ def flip_parts_left_right(parts_x, parts_y, parts_v, left_right_pairs, num_parts
   flipped_v = np.expand_dims(flipped_parts[:,2].ravel().astype(np.int32), 0)
   
   return [flipped_x, flipped_y, flipped_v]
+
+def flip_heatmaps_left_right(heatmaps, left_right_pairs):
+  heatmaps = np.fliplr(heatmaps)
+  for left_idx, right_idx in left_right_pairs:
+    l = np.copy(heatmaps[:,:,left_idx])
+    heatmaps[:,:,left_idx] = heatmaps[:,:,right_idx]
+    heatmaps[:,:,right_idx] = l[:,:]
+  return heatmaps.astype(np.float32)

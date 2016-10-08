@@ -11,7 +11,7 @@ from scipy.misc import imresize
 import tensorflow as tf
 
 from config import parse_config_file
-from train_inputs import input_nodes
+from train_inputs_precomputed import input_nodes
 
 def create_solid_rgb_image(shape, color):
   image = np.zeros(shape, np.uint8)
@@ -76,7 +76,7 @@ def visualize(tfrecords, cfg):
         for p in range(num_parts):
           if part_visibilities[p] > 0:
             idx = 2*p
-            x, y = parts[idx:idx+2] * float(cfg.INPUT_SIZE) / cfg.HEATMAP_SIZE
+            x, y = parts[idx:idx+2] * float(cfg.INPUT_SIZE) 
             plt.plot(x, y, color=cfg.PARTS.COLORS[p], marker=cfg.PARTS.SYMBOLS[p], label=cfg.PARTS.NAMES[p])
         
         heatmaps_figure = plt.figure("Heatmaps")

@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from config import parse_config_file
-from train_inputs import input_nodes
+from train_inputs_precomputed import input_nodes
 import loss
 import model
 
