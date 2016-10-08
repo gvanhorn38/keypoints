@@ -277,3 +277,27 @@ def two_d_gaussian(center_x, center_y, sigma_x, sigma_y, corr, shape):
 
   return output
 
+def flip_parts_left_right(parts_x, parts_y, parts_v, left_right_pairs, num_parts):
+  """Flip the parts horizontally. The parts are in normalized coordinates
+  """
+  
+  flipped_parts = np.vstack([np.squeeze(parts_x), np.squeeze(parts_y), np.squeeze(parts_v)]).transpose([1, 0])
+  flipped_parts[:,0] = 1. - flipped_parts[:,0]
+  
+  num_instances = flipped_parts.shape[0] / num_parts
+
+  for i in range(num_instances):
+    for left_idx, right_idx in left_right_pairs:
+      l = i * num_parts + left_idx
+      r = i * num_parts + right_idx
+      x,y,v = flipped_parts[l]
+      flipped_parts[l] = flipped_parts[r][:]
+      flipped_parts[r] = [x,y,v]
+  
+  flipped_parts = flipped_parts.astype(np.float32)
+
+  flipped_x = np.expand_dims(flipped_parts[:,0].ravel(), 0)
+  flipped_y = np.expand_dims(flipped_parts[:,1].ravel(), 0)
+  flipped_v = np.expand_dims(flipped_parts[:,2].ravel().astype(np.int32), 0)
+  
+  return [flipped_x, flipped_y, flipped_v]

@@ -3,6 +3,7 @@ Visualize the training inputs to the network.
 """
 
 import argparse
+import logging
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy import interpolate
@@ -19,6 +20,9 @@ def create_solid_rgb_image(shape, color):
 
 def visualize(tfrecords, cfg):
   
+  logger = logging.getLogger()
+  logger.setLevel(logging.DEBUG)
+
   graph = tf.Graph()
   sess = tf.Session(graph = graph)
   
@@ -29,24 +33,15 @@ def visualize(tfrecords, cfg):
 
     # Input Nodes
     batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = input_nodes(
-  
-      tfrecords, 
-
+      tfrecords,
       num_parts,
-
-      # number of times to read the tfrecords
       num_epochs=None,
-
-      # Data queue feeding the model
       batch_size=cfg.BATCH_SIZE,
-      num_threads=2,
+      num_threads=1,
       shuffle_batch = False,
       capacity = 10,
-      min_after_dequeue = 96,
-
+      min_after_dequeue = 0,
       add_summaries = True,
-
-      # Global configuration
       cfg=cfg
     )
 

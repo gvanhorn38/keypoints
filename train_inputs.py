@@ -2,7 +2,7 @@
 import numpy as np
 import tensorflow as tf
 
-from inputs import distorted_shifted_bounding_box, distort_color, apply_with_random_selector, build_heatmaps, extract_crop, two_d_gaussian
+from inputs import distorted_shifted_bounding_box, distort_color, apply_with_random_selector, build_heatmaps, extract_crop, two_d_gaussian, flip_parts_left_right
 
 def input_nodes(
   
@@ -81,9 +81,10 @@ def input_nodes(
 
     parts_x = tf.expand_dims(features['image/object/parts/x'].values, 0)
     parts_y = tf.expand_dims(features['image/object/parts/y'].values, 0)
+    parts_v = tf.cast(tf.expand_dims(features['image/object/parts/v'].values, 0), tf.int32)
     
-    part_visibilities = tf.cast(features['image/object/parts/v'], tf.int32)
-    part_visibilities = tf.reshape(tf.sparse_tensor_to_dense(part_visibilities), tf.pack([num_bboxes, num_parts]))
+    #part_visibilities = tf.cast(features['image/object/parts/v'], tf.int32)
+    #part_visibilities = tf.reshape(tf.sparse_tensor_to_dense(part_visibilities), tf.pack([num_bboxes, num_parts]))
 
     areas = features['image/object/area'].values
     areas = tf.reshape(areas, [num_bboxes])
@@ -111,7 +112,11 @@ def input_nodes(
       do_flip = tf.less(r, 0.5)
       image = tf.cond(do_flip, lambda: tf.image.flip_left_right(image), lambda: tf.identity(image))
       xmin, xmax = tf.cond(do_flip, lambda: tf.tuple([1. - xmax, 1. - xmin]), lambda: tf.tuple([xmin, xmax]))
-      parts_x = tf.cond(do_flip, lambda: tf.tuple([1. - parts_x]), lambda: tf.tuple([parts_x]))
+      parts_x, parts_y, parts_v = tf.cond(do_flip, 
+        lambda: tf.py_func(flip_parts_left_right, [parts_x, parts_y, parts_v, cfg.PARTS.LEFT_RIGHT_PAIRS, num_parts], [tf.float32, tf.float32, tf.int32]), 
+        lambda: tf.tuple([parts_x, parts_y, parts_v])
+      )
+    part_visibilities = tf.reshape(parts_v, tf.pack([num_bboxes, num_parts]))
 
     # Distort the colors
     r = tf.random_uniform([], minval=0, maxval=1, dtype=tf.float32)
