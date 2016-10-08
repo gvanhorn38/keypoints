@@ -249,32 +249,56 @@ def distorted_shifted_bounding_box(xmin, ymin, xmax, ymax, num_bboxes, image_hei
   return xmin, ymin, xmax, ymax
 
 
+# def two_d_gaussian(center_x, center_y, sigma_x, sigma_y, corr, shape):
+#   """
+#   Generate a 2d gaussian image.
+#   This can be optimized using vector notation rather than for loops....
+
+#   corr is the correlation between the two axes.
+#   shape is a tuple of (height, width)
+#   """
+
+#   output = np.empty(shape, dtype=np.float32)
+
+#   A = 1. / (2. * np.pi * sigma_x * sigma_y * np.sqrt(1. - corr ** 2))
+#   A = 1 # GVH : Get rid of the normalization for now
+#   B = -1. / (2. * (1. - corr**2))
+
+#   sigma_x_sq = sigma_x ** 2
+#   sigma_y_sq = sigma_y ** 2
+
+#   for y in range(shape[0]):
+#     for x in range(shape[1]):
+#       C1 = ((x - center_x) ** 2) / sigma_x_sq
+#       C2 = ((y - center_y) ** 2) / sigma_y_sq
+#       C3 = 2. * corr * (x - center_x) * (y - center_y) / (sigma_x * sigma_y)
+#       output[y,x] = A * np.exp(B * (C1 + C2 - C3))
+
+#   return output
+
 def two_d_gaussian(center_x, center_y, sigma_x, sigma_y, corr, shape):
-  """
-  Generate a 2d gaussian image.
-  This can be optimized using vector notation rather than for loops....
 
-  corr is the correlation between the two axes.
-  shape is a tuple of (height, width)
-  """
+  #output = np.empty(shape, dtype=np.float32)
 
-  output = np.empty(shape, dtype=np.float32)
-
-  A = 1. / (2. * np.pi * sigma_x * sigma_y * np.sqrt(1. - corr ** 2))
+  #A = 1. / (2. * np.pi * sigma_x * sigma_y * np.sqrt(1. - corr ** 2))
   A = 1 # GVH : Get rid of the normalization for now
   B = -1. / (2. * (1. - corr**2))
 
   sigma_x_sq = sigma_x ** 2
   sigma_y_sq = sigma_y ** 2
 
-  for y in range(shape[0]):
-    for x in range(shape[1]):
-      C1 = ((x - center_x) ** 2) / sigma_x_sq
-      C2 = ((y - center_y) ** 2) / sigma_y_sq
-      C3 = 2. * corr * (x - center_x) * (y - center_y) / (sigma_x * sigma_y)
-      output[y,x] = A * np.exp(B * (C1 + C2 - C3))
+  y = np.array(np.arange(shape[0]))
+  y = np.tile([y], [shape[0],1]).T
+  x = np.array(np.arange(shape[1]))
+  x = np.tile([x], [shape[1], 1])
 
-  return output
+  C1 = ((x - center_x) ** 2) / sigma_x_sq
+  C2 = ((y - center_y) ** 2) / sigma_y_sq
+  C3 = 2. * corr * (x - center_x) * (y - center_y) / (sigma_x * sigma_y)
+
+  output = A * np.exp(B * (C1 + C2 - C3))
+
+  return output.astype(np.float32)
 
 def flip_parts_left_right(parts_x, parts_y, parts_v, left_right_pairs, num_parts):
   """Flip the parts horizontally. The parts are in normalized coordinates
