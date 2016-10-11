@@ -2,6 +2,67 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 
+def reshape_bboxes(xmin, ymin, xmax, ymax, pad_percentage=0.25):
+  """Reshape normalized bounding box coordinates so that they are ready for cropping.
+  """
+
+  xmin = np.atleast_1d(np.squeeze(xmin))
+  ymin = np.atleast_1d(np.squeeze(ymin))
+  xmax = np.atleast_1d(np.squeeze(xmax))
+  ymax = np.atleast_1d(np.squeeze(ymax))
+
+  shifted_xmin = []
+  shifted_ymin = []
+  shifted_xmax = []
+  shifted_ymax = []
+
+  for i in range(xmin.shape[0]):
+    
+    x1 = xmin[i]
+    y1 = ymin[i]
+    x2 = xmax[i]
+    y2 = ymax[i]
+
+    w = x2 - x1
+    h = y2 - y1
+
+    center_x = x1 + w / 2.
+    center_y = y1 + h / 2.
+
+    if w > h:
+      pad = pad_percentage * w / 2.
+
+      new_x1 = x1 - pad
+      new_x2 = x2 + pad
+      new_w = new_x2 - new_x1
+      new_h = new_w
+      new_y1 = center_y - new_h / 2.
+      new_y2 = center_y + new_h / 2.
+
+    else:
+
+      pad = pad_percentage * h / 2.
+
+      new_y1 = y1 - pad
+      new_y2 = y2 + pad
+      new_h = new_y2 - new_y1
+      new_w = new_h
+      new_x1 = center_x - new_w / 2.
+      new_x2 = center_x + new_w / 2.
+    
+    shifted_xmin.append(new_x1)
+    shifted_ymin.append(new_y1)
+    shifted_xmax.append(new_x2)
+    shifted_ymax.append(new_y2)
+  
+  shifted_xmin = np.array(shifted_xmin).astype(np.float32)
+  shifted_ymin = np.array(shifted_ymin).astype(np.float32)
+  shifted_xmax = np.array(shifted_xmax).astype(np.float32)
+  shifted_ymax = np.array(shifted_ymax).astype(np.float32)
+
+  return [shifted_xmin, shifted_ymin, shifted_xmax, shifted_ymax]
+
+
 def extract_crop(image, bbox, pad_percentage=0.25):
   """ Extract a bounding box crop from the image.
   Args:
