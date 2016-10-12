@@ -82,7 +82,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
   
   with graph.as_default():
     
-    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h = inputs.input_nodes(
+    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes = inputs.input_nodes(
       tfrecords=tfrecords,
       num_epochs=1,
       batch_size=cfg.BATCH_SIZE,
@@ -119,7 +119,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
 
     saver = tf.train.Saver(shadow_vars, reshape=True)
     
-    fetches = [predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h]
+    fetches = [predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes]
 
     # Now create a training coordinator that will control the different threads
     coord = tf.train.Coordinator()
@@ -188,18 +188,17 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
             image_id = outputs[3][b]
             label = outputs[4][b]
             image_height_widths = outputs[5][b]
-            upper_left_x_y = outputs[6][b]
-            crop_w_h = outputs[7][b]
+            crop_bboxes = outputs[6][b]
             
             # Attempt to compress the heatmaps by just saving local maxima
             heatmaps = np.clip(heatmaps, 0., 1.)
             
              # We need to transform the keypoints back to the original image space.
             image_height, image_width = image_height_widths
-            crop_x, crop_y = upper_left_x_y 
-            crop_w, crop_h = crop_w_h * np.array([image_width, image_height], dtype=np.float32)
+            crop_x1, crop_y1, crop_x2, crop_y2 = crop_bboxes 
+            crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            keypoints = get_local_maxima(heatmaps, crop_x, crop_y, crop_w, crop_h, image_width, image_height)
+            keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
 
             # Convert to types that can be saved in the tfrecord file
             image_id = int(np.asscalar(image_id))

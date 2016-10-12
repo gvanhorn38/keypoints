@@ -19,7 +19,7 @@ from detect import get_local_maxima
 import detect_inputs as inputs
 import model
 
-def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_record, cfg):
+def detect(tfrecords, checkpoint_path, cfg):
 
   tf.logging.set_verbosity(tf.logging.DEBUG)
 
@@ -27,7 +27,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
   
   with graph.as_default():
     
-    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y = inputs.input_nodes(
+    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes = inputs.input_nodes(
       tfrecords=tfrecords,
       num_epochs=1,
       batch_size=cfg.BATCH_SIZE,
@@ -64,7 +64,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
 
     saver = tf.train.Saver(shadow_vars, reshape=True)
     
-    fetches = [batched_images, predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y]
+    fetches = [batched_images, predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes]
 
     # Now create a training coordinator that will control the different threads
     coord = tf.train.Coordinator()
@@ -87,9 +87,6 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
       
       # launch the queue runner threads
       threads = tf.train.start_queue_runners(sess=session, coord=coord)
-
-      results = []
-      #output_writer = None
       
       try:
         
@@ -124,13 +121,14 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
         num_part_cols = 3
         num_part_rows = int(np.ceil(cfg.PARTS.NUM_PARTS / (num_part_cols * 1.)))
 
+        done = False
         step = 0
         print_str = ', '.join([
           'Step: %d',
           'Time/image network (ms): %.1f',
           'Time/image post proc (ms): %.1f'
         ])
-        while not coord.should_stop():
+        while not coord.should_stop() and not done:
          
           outputs = session.run(fetches)
           
@@ -208,22 +206,10 @@ def parse_args():
     parser.add_argument('--checkpoint_path', dest='checkpoint_path',
                           help='path to directory where the checkpoint files are stored. The latest model will be tested against.', type=str,
                           required=False, default=None)
-                          
-    parser.add_argument('--save_dir', dest='save_dir',
-                        help='Path to the directory where the results will be saved',
-                        required=True, type=str)
                         
     parser.add_argument('--config', dest='config_file',
                         help='Path to the configuration file',
                         required=True, type=str)
-    
-    parser.add_argument('--max_iterations', dest='max_iterations',
-                        help='Maximum number of iterations to run. Set to 0 to run on all records.',
-                        required=False, type=int, default=0)
-    
-    parser.add_argument('--iterations_per_record', dest='iterations_per_record',
-                        help='The number of iterations to store in a tfrecord file before creating another one.',
-                        required=False, type=int, default=1000)
 
     args = parser.parse_args()
     
@@ -240,8 +226,5 @@ if __name__ == '__main__':
     detect(
       tfrecords=args.tfrecords,
       checkpoint_path=args.checkpoint_path,
-      save_dir = args.save_dir,
-      max_iterations = args.max_iterations,
-      iterations_per_record = args.iterations_per_record,
       cfg=cfg
     )
