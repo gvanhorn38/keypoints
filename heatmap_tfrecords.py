@@ -137,10 +137,10 @@ def _convert_to_example(image_example, image, height, width, part_sigmas, input_
 
     # Resize the input image
     resized_image = imresize(cropped_image, [input_size, input_size, 3], interp='bilinear')
-    #buffer = io.BytesIO()
+    buffer = io.BytesIO()
     #resized_image_buffer = Image.fromarray(resized_image.astype(np.uint8)).tobytes()
-    #Image.fromarray(resized_image.astype(np.uint8)).save(buffer, 'JPEG', quality=95)
-    #resized_image_buffer = buffer.getvalue()
+    Image.fromarray(resized_image.astype(np.uint8)).save(buffer, 'JPEG', quality=95)
+    resized_image_buffer = buffer.getvalue()
 
     examples.append(tf.train.Example(features=tf.train.Features(feature={
         'image/height': _int64_feature(resized_image.shape[0]),
@@ -166,8 +166,7 @@ def _convert_to_example(image_example, image, height, width, part_sigmas, input_
         'image/format': _bytes_feature(image_format),
         'image/filename': _bytes_feature(os.path.basename(filename)),
         'image/id': _bytes_feature(str(id)),
-        #'image/encoded': _bytes_feature(resized_image_buffer)}))
-        'image/encoded': _int64_feature(resized_image.ravel().tolist())}))
+        'image/encoded': _bytes_feature(resized_image_buffer)}))
     )
   
   return examples
