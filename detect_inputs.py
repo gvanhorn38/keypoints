@@ -105,8 +105,18 @@ def input_nodes(
     labels = tf.reshape(labels, [-1, 1])
     labels.set_shape([None, 1])
 
-    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels = tf.train.batch(
-      [cropped_images, bboxes, scores, image_ids, labels],
+    # We need some book keeping data in order to map the detected keypoints back to image space
+    image_height_widths = tf.tile([[image_height, image_width]], [num_bboxes, 1])
+    image_height_widths.set_shape([None, 2])
+    crop_w = crop_x2 - crop_x1
+    crop_h = crop_y2 - crop_y1
+    upper_left_x_y = tf.transpose(tf.concat(0, [tf.expand_dims(crop_x1, 0), tf.expand_dims(crop_y1, 0)]), [1, 0])
+    upper_left_x_y.set_shape([None, 2])
+    crop_w_h = tf.transpose(tf.concat(0, [tf.expand_dims(crop_w, 0), tf.expand_dims(crop_h, 0)]), [1, 0])
+    crop_w_h.set_shape([None, 2])
+
+    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h = tf.train.batch(
+      [cropped_images, bboxes, scores, image_ids, labels, image_height_widths, upper_left_x_y, crop_w_h],
       batch_size=batch_size,
       num_threads=num_threads,
       capacity= capacity,
@@ -114,5 +124,5 @@ def input_nodes(
     )
 
   # return a batch of images and their labels
-  return batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels
+  return batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h
 

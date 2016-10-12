@@ -2,87 +2,32 @@
 File for detecting parts on images without ground truth.
 """
 import argparse
-import cPickle as pickle
 import json
-import logging
+from matplotlib import pyplot as plt
 import numpy as np
 import os
 import pprint
-import scipy
+from scipy import interpolate
 from scipy.misc import imresize
-import scipy.ndimage as ndimage
-import scipy.ndimage.filters as filters
 import sys
 import tensorflow as tf
 from tensorflow.contrib import slim
 import time
 
 from config import parse_config_file
+from detect import get_local_maxima
 import detect_inputs as inputs
 import model
 
-import scipy
-import scipy.ndimage as ndimage
-import scipy.ndimage.filters as filters
-
-def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, threshold=0.000002, neighborhood_size=15):
-  """ Return the local maxima of the heatmaps
-  Args:
-    data: the heatmaps
-    x_offset : the normalized x_offset coordinate, used to transform the local maxima back to image space
-    y_offset : the normalized y_offset coordinate
-  """
-  
-  keypoints = []
-
-  heatmap_height, heatmap_width, num_parts = data.shape
-  heatmap_height = float(heatmap_height)
-  heatmap_width = float(heatmap_width)
-
-  input_width = float(input_width)
-  input_height = float(input_height)
-
-  image_width = float(image_width)
-  image_height = float(image_height)
-
-  for k in xrange(num_parts):
-
-    data1 = data[:, :, k]
-    data_max = filters.maximum_filter(data1, neighborhood_size)
-    maxima = (data1 == data_max)
-    data_min = filters.minimum_filter(data1, neighborhood_size)
-    diff = (data_max - data_min) > (threshold * data1.max())
-    maxima[diff == 0] = 0
-
-    labeled, num_objects = ndimage.label(maxima)
-    slices = ndimage.find_objects(labeled)
-    x1, y1, v1 = [], [], []
-    for dy,dx in slices:
-      x_center = (dx.start + dx.stop - 1) / 2. 
-      x_center_int = int(np.round(x_center))
-      normalized_x_center = x_center * (input_width / heatmap_width) * (1. / image_width) + x_offset
-      x1.append(float(normalized_x_center))
-
-      y_center = (dy.start + dy.stop - 1) / 2. 
-      y_center_int = int(np.round(y_center))
-      normalized_y_center = y_center * (input_height / heatmap_height) * (1. / image_height) + y_offset
-      y1.append(float(normalized_y_center))
-
-      v1.append(float(data1[y_center_int, x_center_int]))
-    keypoints.append({'x': x1, 'y': y1, 'score': v1})
-  
-  return keypoints
-
 def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_record, cfg):
 
-  logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
+  tf.logging.set_verbosity(tf.logging.DEBUG)
 
   graph = tf.Graph()
   
   with graph.as_default():
     
-    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h = inputs.input_nodes(
+    batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y = inputs.input_nodes(
       tfrecords=tfrecords,
       num_epochs=1,
       batch_size=cfg.BATCH_SIZE,
@@ -119,7 +64,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
 
     saver = tf.train.Saver(shadow_vars, reshape=True)
     
-    fetches = [predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y, batched_crop_w_h]
+    fetches = [batched_images, predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_upper_left_x_y]
 
     # Now create a training coordinator that will control the different threads
     coord = tf.train.Coordinator()
@@ -168,7 +113,17 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
         #output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.tfrecords' % (global_step, output_writer_iteration))
         #output_writer = tf.python_io.TFRecordWriter(output_path)
         
+        plt.ion()
+
+        image_to_convert = tf.placeholder(tf.float32)
+        convert_to_uint8 = tf.image.convert_image_dtype(tf.add(tf.div(image_to_convert, 2.0), 0.5), tf.uint8)
         
+        image_to_resize = tf.placeholder(tf.float32)
+        resize_to_input_size = tf.image.resize_bilinear(image_to_resize, size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE])
+
+        num_part_cols = 3
+        num_part_rows = int(np.ceil(cfg.PARTS.NUM_PARTS / (num_part_cols * 1.)))
+
         step = 0
         print_str = ', '.join([
           'Step: %d',
@@ -176,58 +131,60 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
           'Time/image post proc (ms): %.1f'
         ])
         while not coord.should_stop():
-          t = time.time()
+         
           outputs = session.run(fetches)
-          dt = time.time() - t
-          t = time.time()
+          
           for b in range(cfg.BATCH_SIZE):
 
-            heatmaps = outputs[0][b]
-            bbox = outputs[1][b]
-            score = outputs[2][b]
-            image_id = outputs[3][b]
-            label = outputs[4][b]
-            image_height_widths = outputs[5][b]
-            upper_left_x_y = outputs[6][b]
-            crop_w_h = outputs[7][b]
+            fig = plt.figure("heat maps")
+            plt.clf() 
+    
+            image = outputs[0][b]
+            heatmaps = outputs[1][b]
+            bbox = outputs[2][b]
+            score = outputs[3][b]
+            image_id = outputs[4][b]
             
-            # Attempt to compress the heatmaps by just saving local maxima
+            int8_image = session.run(convert_to_uint8, {image_to_convert : image})
+
             heatmaps = np.clip(heatmaps, 0., 1.)
+            heatmaps = np.expand_dims(heatmaps, 0)
+            resized_heatmaps = session.run(resize_to_input_size, {image_to_resize : heatmaps})
+            resized_heatmaps = np.squeeze(resized_heatmaps)
+
+            for j in range(cfg.PARTS.NUM_PARTS):
             
-             # We need to transform the keypoints back to the original image space.
-            image_height, image_width = image_height_widths
-            crop_x, crop_y = upper_left_x_y 
-            crop_w, crop_h = crop_w_h * np.array([image_width, image_height], dtype=np.float32)
+              heatmap = resized_heatmaps[:,:,j]
+              
+              fig.add_subplot(num_part_rows, num_part_cols, j+1)
+              plt.imshow(int8_image)
 
-            keypoints = get_local_maxima(heatmaps, crop_x, crop_y, crop_w, crop_h, image_width, image_height)
+              # rescale the values of the heatmap 
+              f = interpolate.interp1d([0., 1.], [0, 255])
+              int_heatmap = f(heatmap).astype(np.uint8)
 
-            # Convert to types that can be saved in the tfrecord file
-            image_id = int(np.asscalar(image_id))
-            bbox = bbox.tolist()
-            score = float(np.asscalar(score))
-            label = int(np.asscalar(label))
-            
-            results.append({
-              "image_id" : image_id, 
-              "bbox" : bbox,
-              "score" : score,
-              "keypoints" : keypoints,
-              "label" : label
-            })
-          
-          dtt = time.time() - t
-          print print_str % (step, (dt / cfg.BATCH_SIZE) * 1000, (dtt / cfg.BATCH_SIZE) * 1000)  
-          step += 1
-          
-          if (step % iterations_per_record) == 0:
-            output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.json' % (global_step, output_writer_iteration))
-            with open(output_path, 'w') as f: 
-              json.dump(results, f)
-            output_writer_iteration += 1
-            results = []
-
-          if max_iterations > 0 and step == max_iterations:
+              # Add the heatmap as an alpha channel over the image
+              blank_image = np.zeros(image.shape, np.uint8)
+              blank_image[:] = [255, 0, 0]
+              heat_map_alpha = np.dstack((blank_image, int_heatmap))
+              plt.imshow(heat_map_alpha)
+              plt.axis('off')
+              plt.title(cfg.PARTS.NAMES[j])
+              
+              # Render the argmax point
+              x, y = np.array(np.unravel_index(np.argmax(heatmap), heatmap.shape)[::-1])
+              plt.plot(x, y, color=cfg.PARTS.COLORS[j], marker=cfg.PARTS.SYMBOLS[j], label=cfg.PARTS.NAMES[j])
+              
+              print "%s : max %0.3f, min %0.3f" % (cfg.PARTS.NAMES[j], np.max(heatmap), np.min(heatmap))
+                
+            plt.show()
+            #plt.pause(0.0001)
+            r = raw_input("Push button")
+            if r != "":
+              done = True
               break
+          
+          
           
       except Exception as e:
         # Report exceptions to the coordinator.
@@ -238,13 +195,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
       # And wait for them to actually do it.
       coord.join(threads)
       
-      #if output_writer != None:
-      #  output_writer.close()
-      
-      if len(results) > 0:
-        output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.json' % (global_step, output_writer_iteration))
-        with open(output_path, 'w') as f: 
-          json.dump(results, f)
+
 
 def parse_args():
 
