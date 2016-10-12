@@ -193,7 +193,9 @@ def build_heatmaps(parts, part_visibilities, area, part_sigmas,
       scaled_x = x * im_scale * heat_map_to_target_ratio
       scaled_y = y * im_scale * heat_map_to_target_ratio
 
-      sigma_x = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2. * part_sigmas[j]
+      # GVH: ignore the image scale issue, and use the sigmas directly
+      #sigma_x = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2. * part_sigmas[j]
+      sigma_x = part_sigmas[j]
       sigma_y = sigma_x 
       heat_map = two_d_gaussian(scaled_x, scaled_y, sigma_x, sigma_y, part_corr, (heatmap_size, heatmap_size))
 
