@@ -167,7 +167,6 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
 
               keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
             
-            bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
             pred_parts = []
             for k in keypoints:
               s_idx = np.argsort(k['score']).tolist()
