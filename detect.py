@@ -25,12 +25,13 @@ import scipy
 import scipy.ndimage as ndimage
 import scipy.ndimage.filters as filters
 
-def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, bbox, restrict_to_bbox=False, threshold=0.000002, neighborhood_size=15):
+def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, threshold=0.000002, neighborhood_size=15):
   """ Return the local maxima of the heatmaps
   Args:
     data: the heatmaps
     x_offset : the normalized x_offset coordinate, used to transform the local maxima back to image space
     y_offset : the normalized y_offset coordinate
+
   """
   
   keypoints = []
@@ -44,8 +45,6 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
 
   image_width = float(image_width)
   image_height = float(image_height)
-
-  bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
 
   for k in xrange(num_parts):
 
@@ -65,15 +64,9 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
       x_center_int = int(np.round(x_center))
       normalized_x_center = x_center * (input_width / heatmap_width) * (1. / image_width) + x_offset
       
-      if restrict_to_bbox and (normalized_x_center < bbox_x1 or normalized_x_center > bbox_x2):
-        continue
-
       y_center = (dy.start + dy.stop - 1) / 2. 
       y_center_int = int(np.round(y_center))
       normalized_y_center = y_center * (input_height / heatmap_height) * (1. / image_height) + y_offset
-      
-      if restrict_to_bbox and (normalized_y_center < bbox_y1 or normalized_y_center > bbox_y2):
-        continue
 
       x1.append(float(normalized_x_center))
       y1.append(float(normalized_y_center))
@@ -198,17 +191,40 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
             image_id = outputs[3][b]
             label = outputs[4][b]
             image_height_widths = outputs[5][b]
-            crop_bboxes = outputs[6][b]
+            crop_bbox = outputs[6][b]
             
             # Attempt to compress the heatmaps by just saving local maxima
             heatmaps = np.clip(heatmaps, 0., 1.)
             
              # We need to transform the keypoints back to the original image space.
             image_height, image_width = image_height_widths
-            crop_x1, crop_y1, crop_x2, crop_y2 = crop_bboxes 
+            
+            crop_x1, crop_y1, crop_x2, crop_y2 = crop_bbox 
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height, bbox, restrict_to_bbox=True)
+            restrict_to_bbox=True
+            if restrict_to_bbox:
+              # Crop out the portion of the heatmap that corresponds to the bounding box of the object
+
+              bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
+              heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+
+              #print "%d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
+
+              heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
+
+              bbox_w = (bbox_x2 - bbox_x1) * image_width 
+              bbox_h = (bbox_y2 - bbox_y1) * image_height
+
+              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+
+            else:
+
+              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
 
             # Convert to types that can be saved in the tfrecord file
             image_id = int(np.asscalar(image_id))
