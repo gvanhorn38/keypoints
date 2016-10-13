@@ -25,7 +25,7 @@ import scipy
 import scipy.ndimage as ndimage
 import scipy.ndimage.filters as filters
 
-def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, threshold=0.000002, neighborhood_size=15):
+def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, bbox, restrict_to_bbox=False, threshold=0.000002, neighborhood_size=15):
   """ Return the local maxima of the heatmaps
   Args:
     data: the heatmaps
@@ -45,6 +45,8 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
   image_width = float(image_width)
   image_height = float(image_height)
 
+  bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
   for k in xrange(num_parts):
 
     data1 = data[:, :, k]
@@ -58,17 +60,25 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
     slices = ndimage.find_objects(labeled)
     x1, y1, v1 = [], [], []
     for dy,dx in slices:
+      
       x_center = (dx.start + dx.stop - 1) / 2. 
       x_center_int = int(np.round(x_center))
       normalized_x_center = x_center * (input_width / heatmap_width) * (1. / image_width) + x_offset
-      x1.append(float(normalized_x_center))
+      
+      if restrict_to_bbox and (normalized_x_center < bbox_x1 or normalized_x_center > bbox_x2):
+        continue
 
       y_center = (dy.start + dy.stop - 1) / 2. 
       y_center_int = int(np.round(y_center))
       normalized_y_center = y_center * (input_height / heatmap_height) * (1. / image_height) + y_offset
-      y1.append(float(normalized_y_center))
+      
+      if restrict_to_bbox and (normalized_y_center < bbox_y1 or normalized_y_center > bbox_y2):
+        continue
 
+      x1.append(float(normalized_x_center))
+      y1.append(float(normalized_y_center))
       v1.append(float(data1[y_center_int, x_center_int]))
+
     keypoints.append({'x': x1, 'y': y1, 'score': v1})
   
   return keypoints
@@ -198,7 +208,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
             crop_x1, crop_y1, crop_x2, crop_y2 = crop_bboxes 
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+            keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height, bbox, restrict_to_bbox=True)
 
             # Convert to types that can be saved in the tfrecord file
             image_id = int(np.asscalar(image_id))
