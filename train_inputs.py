@@ -55,7 +55,7 @@ def input_nodes(
         'image/object/parts/x' : tf.VarLenFeature(dtype=tf.float32), # x coord for all parts and all objects
         'image/object/parts/y' : tf.VarLenFeature(dtype=tf.float32), # y coord for all parts and all objects
         'image/object/parts/v' : tf.VarLenFeature(dtype=tf.int64),   # part visibility for all parts and all objects
-        'image/object/area' : tf.VarLenFeature(dtype=tf.float32), # the area of the object, based on segmentation mask
+        'image/object/area' : tf.VarLenFeature(dtype=tf.float32), # the area of the object, based on segmentation mask or bounding box mask
       }
     )
 
