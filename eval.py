@@ -143,7 +143,29 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
             crop_x1, crop_y1, crop_x2, crop_y2 = crop_bboxes 
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+            restrict_to_bbox=True
+            if restrict_to_bbox:
+              # Crop out the portion of the heatmap that corresponds to the bounding box of the object
+
+              bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
+              heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+              heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+
+              #print "%d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
+
+              heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
+
+              bbox_w = (bbox_x2 - bbox_x1) * image_width 
+              bbox_h = (bbox_y2 - bbox_y1) * image_height
+
+              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+
+            else:
+
+              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
             
             bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
             pred_parts = []
@@ -151,26 +173,16 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
               s_idx = np.argsort(k['score']).tolist()
               s_idx.reverse()
               
-              found_valid_part = False
-              for idx in s_idx:
-                x = k['x'][idx]
-                y = k['y'][idx]
-
-                if x >= bbox_x1 and x <= bbox_x2:
-                  if y >= bbox_y1 and y <= bbox_y2:
-                    x = x * image_width
-                    y = y * image_height
-                    pred_parts += [x, y, 1]
-                    found_valid_part = True
-                    break
-
-              if not found_valid_part:
-                idx = s_idx[0]
-                x = k['x'][idx]
-                y = k['y'][idx]
-                x = x * image_width
-                y = y * image_height
-                pred_parts += [x, y, 1]
+              if len(s_idx) == 0:
+                x = 0
+                y = 0
+                v = 0
+              else:
+                x = k['x'][s_idx[0]]
+                y = k['y'][s_idx[0]]
+                v = 1
+              
+              pred_parts += [x, y, v]
                
 
             # Store the results   
