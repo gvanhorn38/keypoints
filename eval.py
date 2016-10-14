@@ -177,8 +177,8 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
                 y = 0
                 v = 0
               else:
-                x = k['x'][s_idx[0]]
-                y = k['y'][s_idx[0]]
+                x = k['x'][s_idx[0]] * image_width
+                y = k['y'][s_idx[0]] * image_height
                 v = 1
               
               pred_parts += [x, y, v]
