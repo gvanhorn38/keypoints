@@ -205,8 +205,8 @@ def build_heatmaps(parts, part_visibilities, area, part_sigmas,
 
       # Axis order: (batch elem, channel, height, width)
       preped_heat_maps[:, :, j] = heat_map
-      preped_part_locations[ind] = scaled_x
-      preped_part_locations[ind+1] = scaled_y        
+      preped_part_locations[ind] = scaled_x / float(heatmap_size)
+      preped_part_locations[ind+1] = scaled_y / float(heatmap_size)       
     else:
       # the heat map blob is prefilled with zeros, so we are good to go.
       pass

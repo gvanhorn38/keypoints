@@ -11,15 +11,15 @@ from scipy.misc import imresize
 import tensorflow as tf
 
 from config import parse_config_file
-#from train_inputs_precomputed import input_nodes
-from train_inputs import input_nodes
+import train_inputs 
+import train_inputs_precomputed
 
 def create_solid_rgb_image(shape, color):
   image = np.zeros(shape, np.uint8)
   image[:] = color
   return image
 
-def visualize(tfrecords, cfg):
+def visualize(tfrecords, cfg, precomputed=False):
   
   logger = logging.getLogger()
   logger.setLevel(logging.DEBUG)
@@ -31,6 +31,11 @@ def visualize(tfrecords, cfg):
 
   # run a session to look at the images...
   with sess.as_default(), graph.as_default():
+
+    if precomputed:
+      input_nodes = train_inputs_precomputed.input_nodes
+    else:
+      input_nodes = train_inputs.input_nodes
 
     # Input Nodes
     batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = input_nodes(
@@ -77,7 +82,7 @@ def visualize(tfrecords, cfg):
         for p in range(num_parts):
           if part_visibilities[p] > 0:
             idx = 2*p
-            x, y = parts[idx:idx+2] #* float(cfg.INPUT_SIZE) 
+            x, y = parts[idx:idx+2] * float(cfg.INPUT_SIZE) 
             plt.plot(x, y, color=cfg.PARTS.COLORS[p], marker=cfg.PARTS.SYMBOLS[p], label=cfg.PARTS.NAMES[p])
         
         heatmaps_figure = plt.figure("Heatmaps")
@@ -123,6 +128,10 @@ def parse_args():
     parser.add_argument('--config', dest='config_file',
                         help='Path to the configuration file',
                         required=True, type=str)
+    
+    parser.add_argument('--precomputed', dest='precomputed',
+                        help='If True, then we assume that the tfrecords contain the precomputed heatmaps.',
+                        action='store_true', default=False)
 
     args = parser.parse_args()
     return args
