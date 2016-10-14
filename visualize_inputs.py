@@ -7,7 +7,6 @@ import logging
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy import interpolate
-from scipy.misc import imresize
 import tensorflow as tf
 
 from config import parse_config_file
@@ -54,6 +53,9 @@ def visualize(tfrecords, cfg, precomputed=False):
     image_to_convert = tf.placeholder(tf.float32)
     convert_to_uint8 = tf.image.convert_image_dtype(tf.add(tf.div(image_to_convert, 2.0), 0.5), tf.uint8)
 
+    image_to_resize = tf.placeholder(tf.float32)
+    resize_to_input_size = tf.image.resize_bilinear(image_to_resize, size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE])
+
     coord = tf.train.Coordinator()
     tf.initialize_all_variables().run()
     tf.initialize_local_variables().run()
@@ -90,18 +92,24 @@ def visualize(tfrecords, cfg, precomputed=False):
 
         heatmaps = outputs[1][b]
         for p in range(num_parts):
-          
           heatmap = heatmaps[:,:,p]
+          print "%s : max %0.3f, min %0.3f" % (cfg.PARTS.NAMES[p], np.max(heatmap), np.min(heatmap))
+
+        heatmaps = np.clip(heatmaps, 0., 1.)
+        heatmaps = np.expand_dims(heatmaps, 0)
+        resized_heatmaps = sess.run(resize_to_input_size, {image_to_resize : heatmaps})
+        resized_heatmaps = np.squeeze(resized_heatmaps)
+
+        for p in range(num_parts):
+          
+          heatmap = resized_heatmaps[:,:,p]
 
           heatmaps_figure.add_subplot(num_part_rows, num_part_cols, p+1)
           plt.imshow(uint8_image)
-          
-          # Upscale the heatmap to match the image size
-          scaled_heatmap = imresize(heatmap, (cfg.INPUT_SIZE, cfg.INPUT_SIZE))
-
+ 
           # rescale the values of the heatmap 
-          f = interpolate.interp1d([np.min(scaled_heatmap), np.max(scaled_heatmap)], [0, 255])
-          int_heatmap = f(scaled_heatmap).astype(np.uint8)
+          f = interpolate.interp1d([np.min(heatmap), np.max(heatmap)], [0, 255])
+          int_heatmap = f(heatmap).astype(np.uint8)
 
           # Add the heatmap as an alpha channel over the image
           blank_image = create_solid_rgb_image(image.shape, [255, 0, 0])
@@ -141,7 +149,8 @@ def main():
   cfg = parse_config_file(args.config_file)
   visualize(
     tfrecords=args.tfrecords,
-    cfg=cfg
+    cfg=cfg,
+    precomputed=args.precomputed
   )
 
   

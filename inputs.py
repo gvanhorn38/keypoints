@@ -193,6 +193,10 @@ def build_heatmaps(parts, part_visibilities, area, part_sigmas,
       scaled_x = x * im_scale * heat_map_to_target_ratio
       scaled_y = y * im_scale * heat_map_to_target_ratio
 
+      # Force the point to lie on a pixel. This way there will be a constant peak for all visible parts, no matter the sigma
+      scaled_x = int(np.round(scaled_x))
+      scaled_y = int(np.round(scaled_y))
+
       # GVH: ignore the image scale issue, and use the sigmas directly
       #sigma_x = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2. * part_sigmas[j]
       sigma_x = part_sigmas[j]
