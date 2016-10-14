@@ -88,7 +88,7 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
         num_parts = cfg.PARTS.NUM_PARTS
       )
     
-      heatmap_loss = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps)
+      heatmap_loss, loss_summaries = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps)
     
 
     total_loss = slim.losses.get_total_loss()
@@ -111,9 +111,9 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
     # Summary operations
     summary_op = tf.merge_summary([
       tf.scalar_summary('total_loss', total_loss),
-      tf.scalar_summary('heatmap_loss', heatmap_loss),
+      tf.scalar_summary('total_heatmap_loss', heatmap_loss),
       tf.scalar_summary('learning_rate', lr)
-    ] + input_summaries)
+    ] + input_summaries + loss_summaries)
 
     if pretrained_model_path != None:
       init_assign_op, init_feed_dict = slim.assign_from_checkpoint(pretrained_model_path, inception_vars)
