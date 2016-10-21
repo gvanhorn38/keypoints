@@ -33,7 +33,7 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
     y_offset : the normalized y_offset coordinate
 
   """
-  
+
   keypoints = []
 
   heatmap_height, heatmap_width, num_parts = data.shape
@@ -59,12 +59,12 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
     slices = ndimage.find_objects(labeled)
     x1, y1, v1 = [], [], []
     for dy,dx in slices:
-      
-      x_center = (dx.start + dx.stop - 1) / 2. 
+
+      x_center = (dx.start + dx.stop - 1) / 2.
       x_center_int = int(np.round(x_center))
       normalized_x_center = x_center * (input_width / heatmap_width) * (1. / image_width) + x_offset
-      
-      y_center = (dy.start + dy.stop - 1) / 2. 
+
+      y_center = (dy.start + dy.stop - 1) / 2.
       y_center_int = int(np.round(y_center))
       normalized_y_center = y_center * (input_height / heatmap_height) * (1. / image_height) + y_offset
 
@@ -73,18 +73,18 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
       v1.append(float(data1[y_center_int, x_center_int]))
 
     keypoints.append({'x': x1, 'y': y1, 'score': v1})
-  
+
   return keypoints
 
-def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_record, cfg):
+def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_record, save_full_res_heatmaps, cfg):
 
   logger = logging.getLogger()
   logger.setLevel(logging.DEBUG)
 
   graph = tf.Graph()
-  
+
   with graph.as_default():
-    
+
     batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes = inputs.input_nodes(
       tfrecords=tfrecords,
       num_epochs=1,
@@ -93,7 +93,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
       capacity = cfg.QUEUE_CAPACITY,
       cfg=cfg
     )
-    
+
     batch_norm_params = {
         'decay': cfg.BATCHNORM_MOVING_AVERAGE_DECAY,
         'epsilon': 0.001,
@@ -106,27 +106,27 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
                         normalizer_params=batch_norm_params,
                         weights_regularizer=slim.l2_regularizer(0.00004),
                         biases_regularizer=slim.l2_regularizer(0.00004)) as scope:
-      
+
       predicted_heatmaps = model.build(
-        input = batched_images, 
+        input = batched_images,
         num_parts = cfg.PARTS.NUM_PARTS
       )
-    
+
     ema = tf.train.ExponentialMovingAverage(
       decay=cfg.MOVING_AVERAGE_DECAY
-    )   
+    )
     shadow_vars = {
       ema.average_name(var) : var
       for var in slim.get_model_variables()
     }
 
     saver = tf.train.Saver(shadow_vars, reshape=True)
-    
+
     fetches = [predicted_heatmaps[-1], batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes]
 
     # Now create a training coordinator that will control the different threads
     coord = tf.train.Coordinator()
-    
+
     sess_config = tf.ConfigProto(
       log_device_placement=False,
       #device_filters = device_filters,
@@ -136,24 +136,24 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
       )
     )
     session = tf.Session(graph=graph, config=sess_config)
-    
+
     with session.as_default():
 
       # make sure to initialize all of the variables
       tf.initialize_all_variables().run()
       tf.initialize_local_variables().run()
-      
+
       # launch the queue runner threads
       threads = tf.train.start_queue_runners(sess=session, coord=coord)
 
       results = []
       #output_writer = None
-      
+
       try:
-        
+
         if tf.gfile.IsDirectory(checkpoint_path):
           checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
-        
+
         if checkpoint_path is None:
           print "ERROR: No checkpoint file found."
           return
@@ -165,13 +165,13 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
         # extract global_step from it.
         global_step = int(checkpoint_path.split('/')[-1].split('-')[-1])
         print "Found model for global step: %d" % (global_step,)
-        
+
         # we will store results into a tfrecord file
         output_writer_iteration = 0
         #output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.tfrecords' % (global_step, output_writer_iteration))
         #output_writer = tf.python_io.TFRecordWriter(output_path)
-        
-        
+
+
         step = 0
         print_str = ', '.join([
           'Step: %d',
@@ -192,14 +192,14 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
             label = outputs[4][b]
             image_height_widths = outputs[5][b]
             crop_bbox = outputs[6][b]
-            
+
             # Attempt to compress the heatmaps by just saving local maxima
             heatmaps = np.clip(heatmaps, 0., 1.)
-            
+
              # We need to transform the keypoints back to the original image space.
             image_height, image_width = image_height_widths
-            
-            crop_x1, crop_y1, crop_x2, crop_y2 = crop_bbox 
+
+            crop_x1, crop_y1, crop_x2, crop_y2 = crop_bbox
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
             restrict_to_bbox=True
@@ -217,58 +217,74 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
 
               heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
 
-              bbox_w = (bbox_x2 - bbox_x1) * image_width 
+              bbox_w = (bbox_x2 - bbox_x1) * image_width
               bbox_h = (bbox_y2 - bbox_y1) * image_height
 
-              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+              #keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+              save_heatmaps = heatmaps_bbox.tolist()
+              heatmaps_shape = list(heatmaps_bbox.shape)
 
             else:
 
-              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+              #keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+              save_heatmaps = heatmaps.tolist()
+              heatmaps_shape = list(heatmaps_bbox.shape)
 
             # Convert to types that can be saved in the tfrecord file
             image_id = int(np.asscalar(image_id))
             bbox = bbox.tolist()
             score = float(np.asscalar(score))
             label = int(np.asscalar(label))
-            
-            results.append({
-              "image_id" : image_id, 
-              "bbox" : bbox,
-              "score" : score,
-              "keypoints" : keypoints,
-              "label" : label
-            })
-          
+
+            if save_full_res_heatmaps:
+              # save the full resolution heatmaps
+              results.append({
+                "image_id" : image_id,
+                "bbox"     : bbox,
+                "score"    : score,
+                "heatmaps" : save_heatmaps,
+                "shape"    : heatmaps_shape,
+                "label"    : label
+              })
+            else:
+              # save the keypoints
+              results.append({
+                "image_id"  : image_id,
+                "bbox"      : bbox,
+                "score"     : score,
+                "keypoints" : keypoints,
+                "label"     : label
+              })
+
           dtt = time.time() - t
-          print print_str % (step, (dt / cfg.BATCH_SIZE) * 1000, (dtt / cfg.BATCH_SIZE) * 1000)  
+          print print_str % (step, (dt / cfg.BATCH_SIZE) * 1000, (dtt / cfg.BATCH_SIZE) * 1000)
           step += 1
-          
+
           if (step % iterations_per_record) == 0:
             output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.json' % (global_step, output_writer_iteration))
-            with open(output_path, 'w') as f: 
+            with open(output_path, 'w') as f:
               json.dump(results, f)
             output_writer_iteration += 1
             results = []
 
           if max_iterations > 0 and step == max_iterations:
               break
-          
+
       except Exception as e:
         # Report exceptions to the coordinator.
         coord.request_stop(e)
-      
+
       # When done, ask the threads to stop. It is innocuous to request stop twice.
       coord.request_stop()
       # And wait for them to actually do it.
       coord.join(threads)
-      
+
       #if output_writer != None:
       #  output_writer.close()
-      
+
       if len(results) > 0:
         output_path = os.path.join(save_dir, 'heatmap_results-%d-%d.json' % (global_step, output_writer_iteration))
-        with open(output_path, 'w') as f: 
+        with open(output_path, 'w') as f:
           json.dump(results, f)
 
 def parse_args():
@@ -282,25 +298,29 @@ def parse_args():
     parser.add_argument('--checkpoint_path', dest='checkpoint_path',
                           help='path to directory where the checkpoint files are stored. The latest model will be tested against.', type=str,
                           required=False, default=None)
-                          
+
     parser.add_argument('--save_dir', dest='save_dir',
                         help='Path to the directory where the results will be saved',
                         required=True, type=str)
-                        
+
     parser.add_argument('--config', dest='config_file',
                         help='Path to the configuration file',
                         required=True, type=str)
-    
+
     parser.add_argument('--max_iterations', dest='max_iterations',
                         help='Maximum number of iterations to run. Set to 0 to run on all records.',
                         required=False, type=int, default=0)
-    
+
     parser.add_argument('--iterations_per_record', dest='iterations_per_record',
                         help='The number of iterations to store in a tfrecord file before creating another one.',
                         required=False, type=int, default=1000)
 
+    parser.add_argument('--save_full_res_heatmaps', dest='save_full_res_heatmaps',
+                        help='A flag determining if the full heatmaps should be saved or just the local maxima.',
+                        required=False, type=int, default=0)
+
     args = parser.parse_args()
-    
+
     return args
 
 if __name__ == '__main__':
@@ -312,10 +332,11 @@ if __name__ == '__main__':
     print pprint.pprint(cfg)
 
     detect(
-      tfrecords=args.tfrecords,
-      checkpoint_path=args.checkpoint_path,
-      save_dir = args.save_dir,
-      max_iterations = args.max_iterations,
-      iterations_per_record = args.iterations_per_record,
+      tfrecords              = args.tfrecords,
+      checkpoint_path        = args.checkpoint_path,
+      save_dir               = args.save_dir,
+      max_iterations         = args.max_iterations,
+      iterations_per_record  = args.iterations_per_record,
+      save_full_res_heatmaps = args.save_full_res_heatmaps,
       cfg=cfg
     )
