@@ -25,7 +25,7 @@ import scipy
 import scipy.ndimage as ndimage
 import scipy.ndimage.filters as filters
 
-def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, threshold=0.000002, neighborhood_size=15):
+def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_width, image_height, threshold=0.000002, neighborhood_size=10):
   """ Return the local maxima of the heatmaps
   Args:
     data: the heatmaps
@@ -49,6 +49,7 @@ def get_local_maxima(data, x_offset, y_offset, input_width, input_height, image_
   for k in xrange(num_parts):
 
     data1 = data[:, :, k]
+    assert(data1.size!=0)
     data_max = filters.maximum_filter(data1, neighborhood_size)
     maxima = (data1 == data_max)
     data_min = filters.minimum_filter(data1, neighborhood_size)
@@ -220,13 +221,13 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
               bbox_w = (bbox_x2 - bbox_x1) * image_width
               bbox_h = (bbox_y2 - bbox_y1) * image_height
 
-              #keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
               save_heatmaps = heatmaps_bbox.tolist()
               heatmaps_shape = list(heatmaps_bbox.shape)
 
             else:
 
-              #keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
               save_heatmaps = heatmaps.tolist()
               heatmaps_shape = list(heatmaps_bbox.shape)
 

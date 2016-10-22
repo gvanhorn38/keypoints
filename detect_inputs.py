@@ -5,8 +5,8 @@ import tensorflow as tf
 from inputs import reshape_bboxes
 
 def input_nodes(
-  
-  tfrecords, 
+
+  tfrecords,
 
   # number of times to read the tfrecords
   num_epochs=None,
@@ -53,39 +53,39 @@ def input_nodes(
 
     # Read in a jpeg image
     image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
-    
+
      # Convert the pixel values to be in the range [0,1]
     if image.dtype != tf.float32:
       image = tf.image.convert_image_dtype(image, dtype=tf.float32)
 
     image_height = tf.cast(features['image/height'], tf.float32)
     image_width = tf.cast(features['image/width'], tf.float32)
-    
+
     image_id = features['image/id']
 
     xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, 0)
     ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, 0)
     xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, 0)
     ymax = tf.expand_dims(features['image/object/bbox/ymax'].values, 0)
-    
+
     num_bboxes = tf.cast(features['image/object/bbox/count'], tf.int32)
     no_bboxes = tf.equal(num_bboxes, 0)
 
-    #scores = features['image/object/bbox/score'].values #tf.sparse_tensor_to_dense(features['image/object/bbox/score'].values)
-    scores = tf.ones([num_bboxes])#tf.reshape(scores, [num_bboxes]) # 
-    
+    scores = features['image/object/bbox/score'].values #tf.sparse_tensor_to_dense(features['image/object/bbox/score'].values)
+    #scores = tf.ones([num_bboxes])#tf.reshape(scores, [num_bboxes]) # 
+
     labels = features['image/object/bbox/label'].values
     labels = tf.reshape(labels, [num_bboxes])
 
     # computed the bbox coords to use for cropping and crop them out
     crop_x1, crop_y1, crop_x2, crop_y2 = tf.py_func(reshape_bboxes, [xmin, ymin, xmax, ymax], [tf.float32, tf.float32, tf.float32, tf.float32])
     crop_bboxes = tf.transpose(tf.concat(0, [
-        tf.expand_dims(crop_y1, 0), 
-        tf.expand_dims(crop_x1, 0), 
-        tf.expand_dims(crop_y2, 0), 
+        tf.expand_dims(crop_y1, 0),
+        tf.expand_dims(crop_x1, 0),
+        tf.expand_dims(crop_y2, 0),
         tf.expand_dims(crop_x2, 0)]), [1, 0])
     cropped_images = tf.image.crop_and_resize(tf.expand_dims(image, 0), crop_bboxes, tf.zeros([num_bboxes], dtype=tf.int32), crop_size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE], method="bilinear", extrapolation_value=0, name=None)
-    
+
     # Get the images in the range [-1, 1]
     cropped_images = tf.sub(cropped_images, 0.5)
     cropped_images = tf.mul(cropped_images, 2.0)
@@ -98,7 +98,7 @@ def input_nodes(
     bboxes = tf.concat(0, [xmin, ymin, xmax, ymax])
     bboxes = tf.transpose(bboxes, [1, 0])
     bboxes.set_shape([None, 4])
-    
+
     scores = tf.reshape(scores, [-1, 1])
     scores.set_shape([None, 1])
 
@@ -122,4 +122,3 @@ def input_nodes(
 
   # return a batch of images and their labels
   return batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes
-

@@ -5,7 +5,7 @@ CUDA_VISIBLE_DEVICES=0 python detect.py \
 --config /home/mronchi/Research/keypoint-2d-detection/models/heatmaps/model_6/config_detect.yaml \
 --max_iterations 0 \
 --iterations_per_record 1000 \
---save_full_res_heatmaps 1
+--save_full_res_heatmaps 0
 
 
 Step: 7971, Time/image network (ms): 20.5, Time/image post proc (ms): 50811.4
