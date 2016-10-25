@@ -8,7 +8,8 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from config import parse_config_file
-from train_inputs_precomputed import input_nodes
+import train_inputs
+#from train_inputs_precomputed import input_nodes
 import loss
 import model
 
@@ -54,7 +55,7 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
       epsilon=cfg.RMSPROP_EPSILON
     )
 
-    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = input_nodes(
+    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = train_inputs.input_nodes(
       tfrecords,
       cfg.PARTS.NUM_PARTS,
       num_epochs=None,

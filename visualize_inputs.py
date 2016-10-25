@@ -10,7 +10,7 @@ from scipy import interpolate
 import tensorflow as tf
 
 from config import parse_config_file
-import train_inputs2 as train_inputs
+import train_inputs
 import train_inputs_precomputed
 
 def create_solid_rgb_image(shape, color):
