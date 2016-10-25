@@ -1,8 +1,7 @@
-
 import numpy as np
 import tensorflow as tf
 
-from inputs import distorted_shifted_bounding_box, distort_color, apply_with_random_selector, build_heatmaps, extract_crop, two_d_gaussian, flip_parts_left_right
+from inputs import distorted_shifted_bounding_box, distort_color, apply_with_random_selector, build_heatmaps, extract_crop, two_d_gaussian, flip_parts_left_right, build_heatmaps_etc
 
 def input_nodes(
   
@@ -136,105 +135,24 @@ def input_nodes(
       image_with_bboxes = tf.image.draw_bounding_boxes(tf.expand_dims(image, 0), bboxes_to_draw)
       tf.image_summary('flipped_distorted_image', image_with_bboxes)
     
-    # Extract the crops and construct the heatmaps
-    scaled_xmin = xmin * image_width
-    scaled_ymin = ymin * image_height
-    scaled_xmax = xmax * image_width
-    scaled_ymax = ymax * image_height
-
-    scaled_bboxes = tf.concat(0, [scaled_xmin, scaled_ymin, scaled_xmax, scaled_ymax])
-    # order the bboxes so that they have the shape: [num_bboxes, bbox_coords]
-    scaled_bboxes = tf.transpose(scaled_bboxes, [1, 0])
-
-    scaled_parts_x = parts_x * image_width
-    scaled_parts_y = parts_y * image_height
-    scaled_parts = tf.concat(0, [scaled_parts_x, scaled_parts_y])
-    scaled_parts = tf.transpose(scaled_parts, [1, 0])
-    scaled_parts = tf.reshape(scaled_parts, [-1, num_parts * 2])
-
-    def crop_and_resize(loop_iteration, n_boxes, image, bboxes, parts, part_visibilities, areas, part_sigmas, input_size, heatmap_size, cropped_images, all_heatmaps, adjusted_keypoints):
-
-      # Access the current bbbox and parts
-      bbox = tf.squeeze(tf.gather(bboxes, [loop_iteration]))
-      keypoints = tf.squeeze(tf.gather(parts, [loop_iteration]))
-      visibilites = tf.squeeze(tf.gather(part_visibilities, [loop_iteration]))
-      area = tf.squeeze(tf.gather(areas, [loop_iteration]))
-
-      # crop out the bounding box 
-      params = [image, bbox]
-      if cfg.LOOSE_BBOX_CROP:
-        params += [True, cfg.LOOSE_BBOX_PAD_FACTOR]
-      cropped_image, upper_left_x_y = tf.py_func(extract_crop, params, [tf.float32, tf.float32])
-
-      # shift the keypoints based on the new image top left coordinate
-      cropped_keypoints = tf.reshape(tf.reshape(keypoints, [-1, 2]) - upper_left_x_y, [-1])
-
-      # construct the heatmaps and scale the keypoints
-      params = [cropped_keypoints, visibilites, area, part_sigmas, cropped_image, input_size, heatmap_size]
-      heatmaps, scaled_keypoints = tf.py_func(build_heatmaps, params, [tf.float32, tf.float32])
-
-      # Resize the input image
-      cropped_image = tf.expand_dims(cropped_image, 0)
-      cropped_image.set_shape([1, None, None, 3])
-      num_resize_cases = 4
-      cropped_image = apply_with_random_selector(
-        cropped_image,
-        lambda x, method: tf.image.resize_images(x, size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE], method=method),
-        num_cases=num_resize_cases
-      )
-      #cropped_image = tf.image.resize_images(cropped_image, size=[input_size, input_size])
-      cropped_images = tf.concat(0, [cropped_images, cropped_image])
-      
-      heatmaps = tf.expand_dims(heatmaps, 0)
-      all_heatmaps = tf.concat(0, [all_heatmaps, heatmaps])
-
-      scaled_keypoints.set_shape([num_parts*2])
-      keypoints = tf.expand_dims(scaled_keypoints, 0)
-      adjusted_keypoints = tf.concat(0, [adjusted_keypoints, keypoints])
-
-      loop_iteration = tf.add(loop_iteration, 1)
-
-      return [loop_iteration, n_boxes, image, bboxes, parts, part_visibilities, areas, part_sigmas, input_size, heatmap_size, cropped_images, all_heatmaps, adjusted_keypoints]
-
-
-    def loop_cond(*args): 
-      return tf.less(args[0], args[1])
+    # Create the crops, the bounding boxes, the parts and heatmaps
+    bboxes = tf.concat(0, [xmin, ymin, xmax, ymax])
+    bboxes = tf.transpose(bboxes, [1, 0])
+    parts = tf.concat(0, [parts_x, parts_y])
+    parts = tf.transpose(parts, [1, 0])
+    parts = tf.reshape(parts, [-1, num_parts * 2])
     
-    # We'll generate the cropped images, the heatmaps, and the scaled / shifted keypoints
-    image_crops = tf.zeros([0, cfg.INPUT_SIZE, cfg.INPUT_SIZE, 3])
-    heatmaps = tf.zeros([0, cfg.HEATMAP_SIZE, cfg.HEATMAP_SIZE, num_parts])
-    adjusted_parts = tf.zeros([0, num_parts * 2])
-    
-    loop_i = tf.constant(0)
-    loop_variables = [loop_i, num_bboxes, image, scaled_bboxes, scaled_parts, part_visibilities, areas, np.array(cfg.PARTS.SIGMAS), cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, image_crops, heatmaps, adjusted_parts]
-    shape_invariants=[
-      loop_i.get_shape(),
-      num_bboxes.get_shape(),
-      image.get_shape(),
-      scaled_bboxes.get_shape(),
-      scaled_parts.get_shape(),
-      part_visibilities.get_shape(),
-      areas.get_shape(),
-      tf.TensorShape([num_parts]),
-      tf.TensorShape([]),
-      tf.TensorShape([]),
-      tf.TensorShape([None, cfg.INPUT_SIZE, cfg.INPUT_SIZE, 3]),
-      tf.TensorShape([None, cfg.HEATMAP_SIZE, cfg.HEATMAP_SIZE, num_parts]),
-      tf.TensorShape([None, num_parts * 2])
-    ]
-
-    t = tf.while_loop(loop_cond, crop_and_resize, loop_variables, shape_invariants)
-    
-    image_crops = t[-3]
-    heatmaps = t[-2]
-    adjusted_parts = t[-1]
+    image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
+    params = [image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE]
+    cropped_images, heatmaps, parts = tf.py_func(build_heatmaps_etc, params, [tf.uint8, tf.float32, tf.float32]) 
+    cropped_images = tf.image.convert_image_dtype(cropped_images, dtype=tf.float32)
 
     # Add a summary of the final crops
     if add_summaries:
-      tf.image_summary('cropped_images', image_crops)
+      tf.image_summary('cropped_images', cropped_images)
     
     # Get the images in the range [-1, 1]
-    cropped_images = tf.sub(image_crops, 0.5)
+    cropped_images = tf.sub(cropped_images, 0.5)
     cropped_images = tf.mul(cropped_images, 2.0)
 
     # Set the shape of everything for the queue
@@ -243,12 +161,7 @@ def input_nodes(
     image_ids.set_shape([None, 1])
     
     heatmaps.set_shape([None, cfg.HEATMAP_SIZE, cfg.HEATMAP_SIZE, num_parts])
-
-    bboxes = tf.concat(0, [xmin, ymin, xmax, ymax])
-    bboxes = tf.transpose(bboxes, [1, 0])
     bboxes.set_shape([None, 4])
-    
-    parts = adjusted_parts
     parts.set_shape([None, num_parts * 2])
     part_visibilities.set_shape([None, num_parts]) 
 

@@ -2,7 +2,7 @@
 import numpy as np
 import tensorflow as tf
 
-from inputs import reshape_bboxes
+from inputs import reshape_bboxes, extract_resized_crop_bboxes
 
 def input_nodes(
   
@@ -53,10 +53,6 @@ def input_nodes(
 
     # Read in a jpeg image
     image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
-    
-     # Convert the pixel values to be in the range [0,1]
-    if image.dtype != tf.float32:
-      image = tf.image.convert_image_dtype(image, dtype=tf.float32)
 
     image_height = tf.cast(features['image/height'], tf.float32)
     image_width = tf.cast(features['image/width'], tf.float32)
@@ -78,14 +74,29 @@ def input_nodes(
     labels = tf.reshape(labels, [num_bboxes])
 
     # computed the bbox coords to use for cropping and crop them out
-    crop_x1, crop_y1, crop_x2, crop_y2 = tf.py_func(reshape_bboxes, [xmin, ymin, xmax, ymax], [tf.float32, tf.float32, tf.float32, tf.float32])
-    crop_bboxes = tf.transpose(tf.concat(0, [
-        tf.expand_dims(crop_y1, 0), 
-        tf.expand_dims(crop_x1, 0), 
-        tf.expand_dims(crop_y2, 0), 
-        tf.expand_dims(crop_x2, 0)]), [1, 0])
-    cropped_images = tf.image.crop_and_resize(tf.expand_dims(image, 0), crop_bboxes, tf.zeros([num_bboxes], dtype=tf.int32), crop_size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE], method="bilinear", extrapolation_value=0, name=None)
+    if not cfg.LOOSE_BBOX_CROP:
+      crop_bboxes = tf.concat(0, [xmin, ymin, xmax, ymax])
+      crop_bboxes = tf.transpose(crop_bboxes, [1, 0])
+      params = [image, crop_bboxes, cfg.INPUT_SIZE]
+      cropped_images = tf.py_func(extract_resized_crop_bboxes, params, [tf.uint8])[0]
+    else:
+      if image.dtype != tf.float32:
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+      crop_x1, crop_y1, crop_x2, crop_y2 = tf.py_func(reshape_bboxes, [xmin, ymin, xmax, ymax], [tf.float32, tf.float32, tf.float32, tf.float32])
+      crop_bboxes = tf.transpose(tf.concat(0, [
+          tf.expand_dims(crop_y1, 0), 
+          tf.expand_dims(crop_x1, 0), 
+          tf.expand_dims(crop_y2, 0), 
+          tf.expand_dims(crop_x2, 0)]), [1, 0])
+      cropped_images = tf.image.crop_and_resize(tf.expand_dims(image, 0), crop_bboxes, tf.zeros([num_bboxes], dtype=tf.int32), crop_size=[cfg.INPUT_SIZE, cfg.INPUT_SIZE], method="bilinear", extrapolation_value=0, name=None)
+      
+      crop_bboxes = tf.concat(0, [tf.expand_dims(crop_x1, 0), tf.expand_dims(crop_y1, 0), tf.expand_dims(crop_x2, 0), tf.expand_dims(crop_y2, 0)])
+      crop_bboxes = tf.transpose(crop_bboxes, [1,0])
     
+    # Convert the pixel values to be in the range [0,1]
+    if cropped_images.dtype != tf.float32:
+      cropped_images = tf.image.convert_image_dtype(cropped_images, dtype=tf.float32)
+
     # Get the images in the range [-1, 1]
     cropped_images = tf.sub(cropped_images, 0.5)
     cropped_images = tf.mul(cropped_images, 2.0)
@@ -108,8 +119,8 @@ def input_nodes(
     # We need some book keeping data in order to map the detected keypoints back to image space
     image_height_widths = tf.tile([[image_height, image_width]], [num_bboxes, 1])
     image_height_widths.set_shape([None, 2])
-    crop_bboxes = tf.concat(0, [tf.expand_dims(crop_x1, 0), tf.expand_dims(crop_y1, 0), tf.expand_dims(crop_x2, 0), tf.expand_dims(crop_y2, 0)])
-    crop_bboxes = tf.transpose(crop_bboxes, [1,0])
+    #crop_bboxes = tf.concat(0, [tf.expand_dims(crop_x1, 0), tf.expand_dims(crop_y1, 0), tf.expand_dims(crop_x2, 0), tf.expand_dims(crop_y2, 0)])
+    #crop_bboxes = tf.transpose(crop_bboxes, [1,0])
     crop_bboxes.set_shape([None, 4])
 
     batched_images, batched_bboxes, batched_scores, batched_image_ids, batched_labels, batched_image_height_widths, batched_crop_bboxes = tf.train.batch(

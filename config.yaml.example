@@ -107,6 +107,10 @@ HEATMAP_SIZE : 64
 # The image will be resized to [INPUT_SIZE, INPUT_SIZE, 3]
 INPUT_SIZE : 256
 
+# Tight bounding box crops, or loose? 
+TIGHT_BBOX_CROP : true
+LOOSE_BBOX_PAD_FACTOR : 0.25
+
 # Randomly flip the image left right, 50% chance of flipping
 DO_RANDOM_FLIP_LEFT_RIGHT : true
 

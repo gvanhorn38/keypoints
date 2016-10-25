@@ -53,7 +53,7 @@ def _bytes_feature(value):
 
 
 # extra fields:  part_sigmas, input_size, heatmap_size
-def _convert_to_example(image_example, image, height, width, part_sigmas, input_size, heatmap_size):
+def _convert_to_example(image_example, image, height, width, part_sigmas, input_size, heatmap_size, bbox_cfg):
   """Build an Example proto for an example.
   Args:
     image_example: dict, an image example
@@ -117,7 +117,7 @@ def _convert_to_example(image_example, image, height, width, part_sigmas, input_
     area = object_areas[i]
 
     # crop out the region of interest
-    cropped_image, upper_left_x_y = extract_crop(image, bbox)
+    cropped_image, upper_left_x_y = extract_crop(image, bbox, extract_centered_bbox=bbox_cfg['loose'], pad_percentage=bbox_cfg['pad_percentage'])
     
     # offset the keypoints by the new upper_left_x_y
     parts = (parts.reshape([-1, 2]) - upper_left_x_y).reshape([-1])
@@ -243,7 +243,7 @@ def _process_image(filename, coder):
   return image, height, width
 
 
-def _process_image_files_batch(coder, thread_index, ranges, name, output_directory, dataset, num_shards, error_queue, part_sigmas, input_size, heatmap_size):
+def _process_image_files_batch(coder, thread_index, ranges, name, output_directory, dataset, num_shards, error_queue, part_sigmas, input_size, heatmap_size, bbox_cfg):
   """Processes and saves list of images as TFRecord in 1 thread.
   Args:
     coder: instance of ImageCoder to provide TensorFlow image coding utils.
@@ -288,7 +288,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, output_directo
       try:
         image, height, width = _process_image(filename, coder)
 
-        examples = _convert_to_example(image_example, image, height, width, part_sigmas, input_size, heatmap_size)
+        examples = _convert_to_example(image_example, image, height, width, part_sigmas, input_size, heatmap_size, bbox_cfg)
         for example in examples:
           writer.write(example.SerializeToString())
         shard_counter += 1
@@ -313,7 +313,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, output_directo
   sys.stdout.flush()
   
 
-def create(dataset, dataset_name, output_directory, num_shards, num_threads, part_sigmas, input_size, heatmap_size, shuffle=True):
+def create(dataset, dataset_name, output_directory, num_shards, num_threads, part_sigmas, input_size, heatmap_size, bbox_cfg, shuffle=True):
   """Create the tfrecord files to be used to train or test a model.
   
   Args:
@@ -375,7 +375,7 @@ def create(dataset, dataset_name, output_directory, num_shards, num_threads, par
   
   threads = []
   for thread_index in xrange(len(ranges)):
-    args = (coder, thread_index, ranges, dataset_name, output_directory, dataset, num_shards, error_queue, part_sigmas, input_size, heatmap_size)
+    args = (coder, thread_index, ranges, dataset_name, output_directory, dataset, num_shards, error_queue, part_sigmas, input_size, heatmap_size, bbox_cfg)
     t = threading.Thread(target=_process_image_files_batch, args=args)
     t.start()
     threads.append(t)
