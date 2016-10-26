@@ -406,6 +406,32 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
   #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
   return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]
 
+def get_background_parts(bbox, instance_index, all_parts, all_part_visibilities):
+  """Given an instance's bounding box, compute which parts from the other instances overlap this instance.
+  Args:
+    bbox : [x1, y1, x2, y2], same coordinate system as `all_parts`
+    instance_index : the index of the parts that correspond to the instance with `bbox`
+    all_parts : [num instances, num parts *2], same coordinates system as `bbox`
+    all_part_visibilities : [num instances, num parts]
+  """
+  num_instances, num_parts = all_part_visibilities.shape
+  
+  bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
+  overlapping_parts = [[] for i in range(num_parts)]
+  for i in range(num_instances):
+    if i == instance_index:
+      continue
+    for p in range(num_parts):
+      v = all_part_visibilities[i][p]
+      if v > 0:
+        idx = p*2
+        x, y = all_parts[i][idx:idx+2]
+        if x > bbox_x1 and x < bbox_x2:
+          if y > bbox_y1 and y < bbox_y2:
+            overlapping_parts[p] += [x, y]
+  
+  return overlapping_parts
 
 def apply_with_random_selector(x, func, num_cases):
   """Computes func(x, sel), with sel sampled from [0...num_cases-1].
