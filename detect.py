@@ -202,29 +202,41 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
             crop_x1, crop_y1, crop_x2, crop_y2 = crop_bbox 
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            restrict_to_bbox=True
-            if restrict_to_bbox:
-              # Crop out the portion of the heatmap that corresponds to the bounding box of the object
+            if cfg.LOOSE_BBOX_CROP:
+              restrict_to_bbox=True
+              if restrict_to_bbox:
+                # Crop out the portion of the heatmap that corresponds to the bounding box of the object
 
+                bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
+                heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+
+                #print "%d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
+
+                heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
+
+                bbox_w = (bbox_x2 - bbox_x1) * image_width 
+                bbox_h = (bbox_y2 - bbox_y1) * image_height
+
+                keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+
+              else:
+
+                keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+            else:
               bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
-
-              heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
-
-              #print "%d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
-
-              heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
-
               bbox_w = (bbox_x2 - bbox_x1) * image_width 
               bbox_h = (bbox_y2 - bbox_y1) * image_height
+              
+              if bbox_h > bbox_w:
+                input_size = bbox_h
+              else:
+                input_size = bbox_w
 
-              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
-
-            else:
-
-              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+              keypoints = get_local_maxima(heatmaps, bbox_x1, bbox_y1, input_size, input_size, image_width, image_height)
 
             # Convert to types that can be saved in the tfrecord file
             image_id = int(np.asscalar(image_id))

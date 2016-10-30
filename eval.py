@@ -143,30 +143,45 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
             crop_x1, crop_y1, crop_x2, crop_y2 = crop_bboxes 
             crop_w, crop_h = np.array([crop_x2 - crop_x1, crop_y2 - crop_y1]) * np.array([image_width, image_height], dtype=np.float32)
 
-            restrict_to_bbox=True
-            if restrict_to_bbox:
-              # Crop out the portion of the heatmap that corresponds to the bounding box of the object
+            if cfg.LOOSE_BBOX_CROP:
+              restrict_to_bbox=True
+              if restrict_to_bbox:
+                # Crop out the portion of the heatmap that corresponds to the bounding box of the object
 
-              bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+                bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
 
-              heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
-              heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_x1 = int(np.round((bbox_x1 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_y1 = int(np.round((bbox_y1 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_x2 = int(np.round((bbox_x2 - crop_x1) * ( image_width / crop_w ) * cfg.HEATMAP_SIZE ))
+                heatmap_bbox_y2 = int(np.round((bbox_y2 - crop_y1) * ( image_height / crop_h) * cfg.HEATMAP_SIZE ))
 
-              #print "%d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
+                #print "BBox Extract: %d:%d, %d:%d" % (heatmap_bbox_y1, heatmap_bbox_y2, heatmap_bbox_x1, heatmap_bbox_x2)
+                #print "Crop (hxw): %d x %d" % (crop_h, crop_w) 
 
-              heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
+                heatmaps_bbox = heatmaps[heatmap_bbox_y1:heatmap_bbox_y2, heatmap_bbox_x1:heatmap_bbox_x2]
 
-              bbox_w = (bbox_x2 - bbox_x1) * image_width 
-              bbox_h = (bbox_y2 - bbox_y1) * image_height
+                bbox_w = (bbox_x2 - bbox_x1) * image_width 
+                bbox_h = (bbox_y2 - bbox_y1) * image_height
 
-              keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
+                keypoints = get_local_maxima(heatmaps_bbox, bbox_x1, bbox_y1, bbox_w, bbox_h, image_width, image_height)
 
+              else:
+
+                keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
             else:
 
-              keypoints = get_local_maxima(heatmaps, crop_x1, crop_y1, crop_w, crop_h, image_width, image_height)
+              bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+              bbox_w = (bbox_x2 - bbox_x1) * image_width 
+              bbox_h = (bbox_y2 - bbox_y1) * image_height
+              
+              if bbox_h > bbox_w:
+                input_size = bbox_h
+              else:
+                input_size = bbox_w
+
+              keypoints = get_local_maxima(heatmaps, bbox_x1, bbox_y1, input_size, input_size, image_width, image_height)
             
+            selected_scores = []
             pred_parts = []
             for k in keypoints:
               s_idx = np.argsort(k['score']).tolist()
@@ -180,15 +195,16 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
                 x = k['x'][s_idx[0]] * image_width
                 y = k['y'][s_idx[0]] * image_height
                 v = 1
-              
+                selected_scores.append(k['score'][s_idx[0]])
+
               pred_parts += [x, y, v]
                
-
+            avg_score = np.mean(selected_scores)
             # Store the results   
             pred_annotations.append({
               'image_id' : gt_image_id,
               'keypoints' : pred_parts,
-              'score' : 1.,
+              'score' : 1.,#avg_score,
               'category_id' : 1
             })
 
@@ -199,7 +215,8 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
             
             x1, y1, x2, y2 = bbox * np.array([image_width, image_height, image_width, image_height])
             w = x2 - x1
-            h = y2 - y1
+            h = y2 - y1 
+
             gt_annotations.append({
               "id" : gt_annotation_id,
               "image_id" : gt_image_id,
