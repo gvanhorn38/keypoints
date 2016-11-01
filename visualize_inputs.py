@@ -95,7 +95,7 @@ def visualize(tfrecords, cfg, precomputed=False):
           heatmap = heatmaps[:,:,p]
           print "%s : max %0.3f, min %0.3f" % (cfg.PARTS.NAMES[p], np.max(heatmap), np.min(heatmap))
 
-        heatmaps = np.clip(heatmaps, 0., 1.)
+        #heatmaps = np.clip(heatmaps, 0., 1.)
         heatmaps = np.expand_dims(heatmaps, 0)
         resized_heatmaps = sess.run(resize_to_input_size, {image_to_resize : heatmaps})
         resized_heatmaps = np.squeeze(resized_heatmaps)

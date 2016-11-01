@@ -311,7 +311,7 @@ def build_heatmaps(parts, part_visibilities, area, part_sigmas,
 
   return [preped_heat_maps, preped_part_locations]
 
-def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25):
+def build_heatmaps_etc_0(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25):
   """
   Args:
     image (uint8)
@@ -406,6 +406,114 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
   #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
   return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]
 
+def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25):
+  """
+  Args:
+    image (uint8)
+    bboxes (flat32) : [num instaces x 4] normalized coords
+    parts (float32) : [num instances x num parts * 2] normalized coords
+    part_visibilities (int) : [num instances x num parts]
+    part_sigmas (float32) : [num parts]
+    areas (float32) : [num parts]
+  
+  Returns:
+    np.array (uint8) [num instances, input_size, input_size, 3] : The bounding box crops
+    np.array (float32) [num instances, heatmap_size, heatmap_size, num parts] : The heatmaps for each instance
+    np.array (float32) [num instances, num parts * 2] : The normalized keypoint locations in reference to the crops
+  """
+  num_instances, num_parts = all_part_visibilities.shape
+  image_height, image_width = image.shape[:2]
+  image_width_height = np.array([image_width, image_height])
+  
+  float_heatmap_size = float(heatmap_size)
+  heat_map_to_target_ratio = float_heatmap_size / input_size
+
+  # Scale the normalized bounding boxes and parts to be in image space
+  scaled_bboxes = np.round(bboxes * np.array([image_width, image_height, image_width, image_height])).astype(int)
+  scaled_all_parts = (all_parts.reshape([-1, 2]) * image_width_height).reshape([num_instances, num_parts * 2])
+  
+  # Initialize the return values
+  cropped_bbox_images = np.zeros((num_instances, input_size, input_size, 3), dtype=np.uint8)
+  all_heatmaps = np.zeros((num_instances, heatmap_size, heatmap_size, num_parts), dtype=np.float32)
+  heatmap_part_locs = np.zeros((num_instances, num_parts * 2), dtype=np.float32)
+  background_heatmaps = np.zeros((num_instances, heatmap_size, heatmap_size, num_parts), dtype=np.float32)
+
+  # For each instance, crop out the bounding box, construct the heatmaps, and shift the keypoints
+  for i in range(num_instances):
+    bbox = scaled_bboxes[i]
+    parts = scaled_all_parts[i]
+    part_visibilities = all_part_visibilities[i]
+    area = areas[i]
+
+    bbox_x1, bbox_y1, bbox_x2, bbox_y2 = bbox
+
+    bbox_image = image[bbox_y1:bbox_y2, bbox_x1:bbox_x2]
+    
+    bbox_h, bbox_w = bbox_image.shape[:2]
+    if bbox_h > bbox_w:
+      new_height = input_size
+      width_factor = new_height / float(bbox_h)
+      new_width = int(np.round(bbox_w * width_factor))
+      im_scale = width_factor
+    else:
+      new_width = input_size
+      height_factor = new_width / float(bbox_w)
+      new_height = int(np.round(bbox_h * height_factor))
+      im_scale = height_factor
+    
+    if im_scale > 1.:
+      im = cv2.resize(bbox_image,(new_width, new_height), interpolation = cv2.INTER_LINEAR)
+    else:
+      im = cv2.resize(bbox_image,(new_width, new_height), interpolation = cv2.INTER_AREA)
+    cropped_bbox_images[i, :new_height, :new_width, :] = im[:]
+    
+    # Offset the parts based on the bounding box
+    upper_left_x_y = bbox[:2]
+    offset_parts = (parts.reshape([-1, 2]) - upper_left_x_y).reshape([-1])
+    
+    # Scale the keypoints for the heatmap size
+    scaled_offset_parts = offset_parts * im_scale * heat_map_to_target_ratio
+
+    # Force the keypoints to lie on a pixel
+    int_scaled_offset_parts = np.round(scaled_offset_parts).astype(int)
+
+    for j in range(num_parts):
+      ind = j * 2
+      x, y = int_scaled_offset_parts[ind:ind+2]
+      v = part_visibilities[j]
+
+      if v > 0:
+        # GVH: ignore the image scale issue, and use the sigmas directly
+        #sigma_x = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2. * part_sigmas[j]
+        sigma_x = part_sigmas[j]
+        #sigma_x = 1.
+        sigma_y = sigma_x 
+        heat_map = two_d_gaussian(x, y, sigma_x, sigma_y, heatmap_size)
+        
+        all_heatmaps[i, :, :, j] = heat_map      
+      
+      else:
+        # the heat map blob is prefilled with zeros, so we are good to go.
+        pass
+    
+    heatmap_part_locs[i] = (int_scaled_offset_parts / float_heatmap_size)[:]
+    
+    # Compute the background heatmap
+    if num_instances > 1:
+      other_indices = range(num_instances)
+      other_indices.remove(i)
+      other_parts = scaled_all_parts[other_indices]
+      other_part_visibilities = all_part_visibilities[other_indices]
+      other_areas = areas[other_indices]
+      background_heatmap = compute_background_heatmaps(bbox, other_parts, other_part_visibilities, im_scale * heat_map_to_target_ratio, part_sigmas, other_areas, heatmap_size=64)
+      background_heatmap *= -1.
+      all_heatmaps[i] += background_heatmap
+
+  #cropped_bbox_images = cropped_bbox_images.astype(np.float32)
+  #all_heatmaps = np.array(all_heatmaps).astype(np.float32)
+  #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
+  return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]#, background_heatmaps]
+
 def get_background_parts(bbox, instance_index, all_parts, all_part_visibilities):
   """Given an instance's bounding box, compute which parts from the other instances overlap this instance.
   Args:
@@ -432,6 +540,58 @@ def get_background_parts(bbox, instance_index, all_parts, all_part_visibilities)
             overlapping_parts[p] += [x, y]
   
   return overlapping_parts
+
+def compute_background_heatmaps(bbox, all_parts, all_part_visibilities, scaling_factor, part_sigmas, areas, heatmap_size=64):
+  """
+  Args:
+    bbox : in image space
+    all_parts : in image space. This should probably not contain the parts that correspond with `bbox`
+    all_part_visibilites : 
+    scaling_factor : the value to scale the keypoints by to transform them from image space to heatmap space. 
+  """
+  #print all_part_visibilities.shape
+  num_instances, num_parts = all_part_visibilities.shape
+
+  upper_left_x_y = bbox[:2]
+  offset_bottom_right_x, offset_bottom_right_y = bbox[2:] - upper_left_x_y
+
+  # shift all the parts
+  offset_parts = (all_parts.reshape([-1, 2]) - upper_left_x_y).reshape([num_instances, num_parts * 2])
+
+  # Scale the keypoints for the heatmap size
+  scaled_offset_parts = offset_parts * scaling_factor
+
+  # Force the keypoints to lie on a pixel
+  int_scaled_offset_parts = np.round(scaled_offset_parts).astype(int)
+
+  heatmaps = np.zeros([heatmap_size, heatmap_size, num_parts], dtype=np.float32)
+
+  for j in range(num_parts):
+      ind = j * 2
+      xs, ys = offset_parts[:,ind:ind+2].T
+      v = all_part_visibilities[:,j]
+      indices = (xs >= 0) & (xs <= offset_bottom_right_x) & (ys >= 0) & (ys <= offset_bottom_right_y) & (v > 0)
+      visible_parts = int_scaled_offset_parts[:,ind:ind+2][np.where(indices), :].ravel()
+      valid_areas = areas[np.where(indices)].ravel()
+
+      for i in range(sum(indices)):
+        ind_2 = i * 2
+        x, y = visible_parts[ind_2:ind_2+2]
+        area = valid_areas[i]
+        # GVH: ignore the image scale issue, and use the sigmas directly
+        #sigma_x = scaling_factor * np.sqrt(area) * 2. * part_sigmas[j] #* 0.01
+        sigma_x = part_sigmas[j]
+        sigma_y = sigma_x 
+        heat_map = two_d_gaussian(x, y, sigma_x, sigma_y, heatmap_size)
+        
+        heatmaps[:, :, j] += heat_map      
+      
+      else:
+        # the heat map blob is prefilled with zeros, so we are good to go.
+        pass
+  
+  # We may want to clamp at 1? 
+  return heatmaps
 
 def apply_with_random_selector(x, func, num_cases):
   """Computes func(x, sel), with sel sampled from [0...num_cases-1].
