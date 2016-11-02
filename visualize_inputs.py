@@ -37,7 +37,7 @@ def visualize(tfrecords, cfg, precomputed=False):
       input_nodes = train_inputs.input_nodes
 
     # Input Nodes
-    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = input_nodes(
+    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps = input_nodes(
       tfrecords,
       num_parts,
       num_epochs=None,
@@ -67,7 +67,7 @@ def visualize(tfrecords, cfg, precomputed=False):
     plt.ion()
     r = ""
     while r == "":
-      outputs = sess.run([batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids])
+      outputs = sess.run([batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps])
       
       for b in range(cfg.BATCH_SIZE):
 
@@ -87,18 +87,24 @@ def visualize(tfrecords, cfg, precomputed=False):
             x, y = parts[idx:idx+2] * float(cfg.INPUT_SIZE) 
             plt.plot(x, y, color=cfg.PARTS.COLORS[p], marker=cfg.PARTS.SYMBOLS[p], label=cfg.PARTS.NAMES[p])
         
-        heatmaps_figure = plt.figure("Heatmaps")
-        heatmaps_figure.clear()
+       
 
         heatmaps = outputs[1][b]
         for p in range(num_parts):
           heatmap = heatmaps[:,:,p]
           print "%s : max %0.3f, min %0.3f" % (cfg.PARTS.NAMES[p], np.max(heatmap), np.min(heatmap))
 
-        #heatmaps = np.clip(heatmaps, 0., 1.)
+        heatmaps = np.clip(heatmaps, 0., 1.)
         heatmaps = np.expand_dims(heatmaps, 0)
         resized_heatmaps = sess.run(resize_to_input_size, {image_to_resize : heatmaps})
         resized_heatmaps = np.squeeze(resized_heatmaps)
+
+        background_heatmaps = outputs[5][b]
+        resized_background_heatmaps = sess.run(resize_to_input_size, {image_to_resize : np.expand_dims(background_heatmaps, 0)})
+        resized_background_heatmaps = np.squeeze(resized_background_heatmaps)
+
+        heatmaps_figure = plt.figure("Heatmaps")
+        heatmaps_figure.clear()
 
         for p in range(num_parts):
           
@@ -115,6 +121,26 @@ def visualize(tfrecords, cfg, precomputed=False):
           blank_image = create_solid_rgb_image(image.shape, [255, 0, 0])
           heat_map_alpha = np.dstack((blank_image, int_heatmap))
           plt.imshow(heat_map_alpha)
+          plt.axis('off')
+          plt.title(cfg.PARTS.NAMES[p])
+        
+
+        # Show the background heatmaps with the ground truth part location
+        background_heatmaps_figure = plt.figure("Background Heatmaps")
+        background_heatmaps_figure.clear()
+
+        for p in range(num_parts):
+          
+          background_heatmaps_figure.add_subplot(num_part_rows, num_part_cols, p+1)
+          
+          background_heatmap = resized_background_heatmaps[:,:,p]
+          plt.imshow(background_heatmap)
+
+          if part_visibilities[p] > 0:
+            idx = 2*p
+            x, y = parts[idx:idx+2] * float(cfg.INPUT_SIZE) 
+            plt.plot(x, y, color='pink', marker='o', label=cfg.PARTS.NAMES[p])
+
           plt.axis('off')
           plt.title(cfg.PARTS.NAMES[p])
 

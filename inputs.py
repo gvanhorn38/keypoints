@@ -406,7 +406,7 @@ def build_heatmaps_etc_0(image, bboxes, all_parts, all_part_visibilities, part_s
   #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
   return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]
 
-def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25):
+def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25, left_right_pairs=None):
   """
   Args:
     image (uint8)
@@ -498,21 +498,44 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
     
     heatmap_part_locs[i] = (int_scaled_offset_parts / float_heatmap_size)[:]
     
-    # Compute the background heatmap
+    # Compute the "background" heatmap
+    # This will consist of the left/right pair of the parts along with visible parts from other instances that fall within the crop
+    
+    target_left_right_swap_background_heatmap = np.zeros([heatmap_size, heatmap_size, num_parts], dtype=np.float32)
+    if left_right_pairs != None:
+      heatmap = all_heatmaps[i]
+      for left_idx, right_idx in left_right_pairs:
+        left_heatmap = np.copy(heatmap[:,:,left_idx])
+        target_left_right_swap_background_heatmap[:,:,left_idx] += heatmap[:,:,right_idx]
+        target_left_right_swap_background_heatmap[:,:,right_idx] += left_heatmap
+
+    # Compute the heatmaps from other instances that fall within the target's bounding box
+    others_background_heatmap = np.zeros([heatmap_size, heatmap_size, num_parts], dtype=np.float32)
     if num_instances > 1:
       other_indices = range(num_instances)
       other_indices.remove(i)
       other_parts = scaled_all_parts[other_indices]
       other_part_visibilities = all_part_visibilities[other_indices]
       other_areas = areas[other_indices]
-      background_heatmap = compute_background_heatmaps(bbox, other_parts, other_part_visibilities, im_scale * heat_map_to_target_ratio, part_sigmas, other_areas, heatmap_size=64)
-      background_heatmap *= -1.
-      all_heatmaps[i] += background_heatmap
+      others_background_heatmap += compute_background_heatmaps(bbox, other_parts, other_part_visibilities, im_scale * heat_map_to_target_ratio, part_sigmas, other_areas, heatmap_size=64)
+      #background_heatmap *= -1.
+      #all_heatmaps[i] += background_heatmap
+    
+    # Compute the left/right swaps for the background instances
+    others_left_right_swap_background_heatmap = np.zeros([heatmap_size, heatmap_size, num_parts], dtype=np.float32)
+    if left_right_pairs != None:
+      for left_idx, right_idx in left_right_pairs:
+        left_heatmap = np.copy(others_background_heatmap[:,:,left_idx])
+        others_left_right_swap_background_heatmap[:,:,left_idx] += others_background_heatmap[:,:,right_idx]
+        others_left_right_swap_background_heatmap[:,:,right_idx] += left_heatmap
+    
+    # Compute the final background heatmap
+    background_heatmaps[i] = target_left_right_swap_background_heatmap + others_background_heatmap + others_left_right_swap_background_heatmap
 
   #cropped_bbox_images = cropped_bbox_images.astype(np.float32)
   #all_heatmaps = np.array(all_heatmaps).astype(np.float32)
   #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
-  return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]#, background_heatmaps]
+  return [cropped_bbox_images, all_heatmaps, heatmap_part_locs, background_heatmaps]
 
 def get_background_parts(bbox, instance_index, all_parts, all_part_visibilities):
   """Given an instance's bounding box, compute which parts from the other instances overlap this instance.
