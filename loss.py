@@ -14,7 +14,8 @@ def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summa
   total_loss = 0
   summaries = []
   for i, pred in enumerate(pred_heatmaps):
-    l = tf.contrib.losses.mean_squared_error(predictions=pred_heatmaps, labels=gt_heatmaps, weights=background_heatmaps)
+    # params: predictions, targets, weights
+    l = tf.contrib.losses.mean_squared_error(pred_heatmaps, gt_heatmaps, background_heatmaps)
     #l = tf.nn.l2_loss(gt_heatmaps - pred)
     slim.losses.add_loss(l)
     total_loss += l
