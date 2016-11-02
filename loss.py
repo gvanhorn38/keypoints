@@ -19,10 +19,12 @@ def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summa
     #l = tf.nn.l2_loss(gt_heatmaps - pred)
     
     # We want (x - y)W(x - y)
-    d = pred - gt_heatmaps
-    l = d * background_heatmaps * d
-    l = tf.reduce_sum(d) / 2.
+    #d = pred - gt_heatmaps
+    #l = d * background_heatmaps * d
+    #l = tf.reduce_sum(d) / 2.
     
+    l = tf.nn.l2_loss((gt_heatmaps - pred) * background_heatmaps)
+
     slim.losses.add_loss(l)
     total_loss += l
 
