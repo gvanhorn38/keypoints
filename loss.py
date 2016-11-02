@@ -15,8 +15,14 @@ def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summa
   summaries = []
   for i, pred in enumerate(pred_heatmaps):
     # params: predictions, targets, weights
-    l = tf.contrib.losses.mean_squared_error(pred, gt_heatmaps, background_heatmaps)
+    #l = tf.contrib.losses.mean_squared_error(pred, gt_heatmaps, background_heatmaps)
     #l = tf.nn.l2_loss(gt_heatmaps - pred)
+    
+    # We want (x - y)W(x - y)
+    d = pred - gt_heatmaps
+    l = d * background_heatmaps * d
+    l = tf.reduce_sum(d) / 2.
+    
     slim.losses.add_loss(l)
     total_loss += l
 
