@@ -161,6 +161,40 @@ BATCHNORM_MOVING_AVERAGE_DECAY : 0.9997
 # The decay to use for the moving average.
 MOVING_AVERAGE_DECAY : 0.9999
 
+###################
+# Background Heatmap Computation
+
+BACKGROUND_HEATMAPS
+  # Add the right part to the background of the left part (and vice versa)
+  ADD_TARGET_LEFT_RIGHT_PAIRS : true
+  # Add the visible parts from background instances
+  ADD_NON_TARGET_PARTS : true
+  # For the background instances, should their occluded parts be added to the background heatmap? 
+  NON_TARGET_INCLUDE_OCCLUDED : false
+  # Add the right part to the background of the left part for the background instances (and vice versa)
+  ADD_NON_TARGET_LEFT_RIGHT_PAIRS : true
+
+# END Background heatmap computation
+###################
+
+###################
+# Loss settings
+
+LOSS
+  # Add the scaled background heatmap to the ground truth heatmap, then compute the loss
+  USE_SCALED_BACKGROUND : false
+  # The scaling to apply to each predicted heatmap. The number of scales must match the number of hourglass units
+  SCALE_FACTORS : [1., .5, .25, .125, .0625, .03125, .015625, 0]
+
+  # Use the background heatmap as a cost matrix
+  USE_BACKGROUND_AS_COST_MATRIX : false
+  COST_MATRIX_SCALE : 1.
+
+  # Don't take the background heatmaps into account
+  NO_BACKGROUND : true
+
+# END Loss setting
+###################
 
 # Saving models and summaries
 

@@ -143,7 +143,11 @@ def input_nodes(
     parts = tf.reshape(parts, [-1, num_parts * 2])
     
     image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
-    params = [image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, False, 0, cfg.PARTS.LEFT_RIGHT_PAIRS]
+    params = [
+      image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, False, 0, cfg.PARTS.LEFT_RIGHT_PAIRS, 
+      cfg.BACKGROUND_HEATMAPS.ADD_TARGET_LEFT_RIGHT_PAIRS, cfg.BACKGROUND_HEATMAPS.ADD_NON_TARGET_PARTS, 
+      cfg.BACKGROUND_HEATMAPS.NON_TARGET_INCLUDE_OCCLUDED, cfg.BACKGROUND_HEATMAPS.ADD_NON_TARGET_LEFT_RIGHT_PAIRS
+    ]
     cropped_images, heatmaps, parts, background_heatmaps = tf.py_func(build_heatmaps_etc, params, [tf.uint8, tf.float32, tf.float32, tf.float32]) 
     cropped_images = tf.image.convert_image_dtype(cropped_images, dtype=tf.float32)
 
