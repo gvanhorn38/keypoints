@@ -570,7 +570,7 @@ def compute_background_heatmaps(bbox, all_parts, all_part_visibilities, scaling_
       ind = j * 2
       xs, ys = offset_parts[:,ind:ind+2].T
       v = all_part_visibilities[:,j]
-      indices = (xs >= 0) & (xs <= offset_bottom_right_x) & (ys >= 0) & (ys <= offset_bottom_right_y) & (v > 0)
+      indices = (xs >= 0) & (xs <= offset_bottom_right_x) & (ys >= 0) & (ys <= offset_bottom_right_y) & (v > 1)
       visible_parts = int_scaled_offset_parts[:,ind:ind+2][np.where(indices), :].ravel()
       valid_areas = areas[np.where(indices)].ravel()
 
