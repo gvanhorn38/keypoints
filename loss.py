@@ -9,21 +9,25 @@ def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summa
   """
   # Should we also scale the background heatmaps? 
   # Shift the background_heatmaps up by 1 so that by default a unit is not penalized
-  background_heatmaps += 1.
+  shifted_background_heatmaps = background_heatmaps + 1.
 
   total_loss = 0
   summaries = []
+  decay = [1., .5, .25, .125, .0625, .03125, .015625, 0]
   for i, pred in enumerate(pred_heatmaps):
     # params: predictions, targets, weights
     #l = tf.contrib.losses.mean_squared_error(pred, gt_heatmaps, background_heatmaps)
     #l = tf.nn.l2_loss(gt_heatmaps - pred)
     
-    # We want (x - y)W(x - y)
-    #d = pred - gt_heatmaps
-    #l = d * background_heatmaps * d
-    #l = tf.reduce_sum(d) / 2.
+    if False:
+      # We want (x - y)W(x - y)
+      diff = gt_heatmaps - pred
+      squared_scaled_diff = diff * shifted_background_heatmaps * diff
+      l = tf.reduce_sum(squared_scaled_diff) / 2.
+      #l = tf.nn.l2_loss((gt_heatmaps - pred) * shifted_background_heatmaps)
     
-    l = tf.nn.l2_loss((gt_heatmaps - pred) * background_heatmaps)
+    else:
+      l = tf.nn.l2_loss((gt_heatmaps + (background_heatmaps * decay[i]))  - pred)
 
     slim.losses.add_loss(l)
     total_loss += l
