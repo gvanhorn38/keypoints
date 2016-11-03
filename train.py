@@ -55,7 +55,7 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
       epsilon=cfg.RMSPROP_EPSILON
     )
 
-    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = train_inputs.input_nodes(
+    batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps = train_inputs.input_nodes(
       tfrecords,
       cfg.PARTS.NUM_PARTS,
       num_epochs=None,
@@ -89,7 +89,7 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
         num_parts = cfg.PARTS.NUM_PARTS
       )
     
-      heatmap_loss, loss_summaries = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps)
+      heatmap_loss, loss_summaries = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps, batched_background_heatmaps)
     
 
     total_loss = slim.losses.get_total_loss()

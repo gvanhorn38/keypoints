@@ -143,8 +143,8 @@ def input_nodes(
     parts = tf.reshape(parts, [-1, num_parts * 2])
     
     image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
-    params = [image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE]
-    cropped_images, heatmaps, parts = tf.py_func(build_heatmaps_etc, params, [tf.uint8, tf.float32, tf.float32]) 
+    params = [image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, False, 0, cfg.PARTS.LEFT_RIGHT_PAIRS]
+    cropped_images, heatmaps, parts, background_heatmaps = tf.py_func(build_heatmaps_etc, params, [tf.uint8, tf.float32, tf.float32, tf.float32]) 
     cropped_images = tf.image.convert_image_dtype(cropped_images, dtype=tf.float32)
 
     # Add a summary of the final crops
@@ -164,10 +164,11 @@ def input_nodes(
     bboxes.set_shape([None, 4])
     parts.set_shape([None, num_parts * 2])
     part_visibilities.set_shape([None, num_parts]) 
+    background_heatmaps.set_shape([None, cfg.HEATMAP_SIZE, cfg.HEATMAP_SIZE, num_parts])
 
     if shuffle_batch:
-      batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = tf.train.shuffle_batch(
-        [cropped_images, heatmaps, parts, part_visibilities, image_ids],
+      batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps = tf.train.shuffle_batch(
+        [cropped_images, heatmaps, parts, part_visibilities, image_ids, background_heatmaps],
         batch_size=batch_size,
         num_threads=num_threads,
         capacity= capacity, #batch_size * (num_threads + 2),
@@ -179,8 +180,8 @@ def input_nodes(
       )
 
     else:
-      batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids = tf.train.batch(
-        [cropped_images, heatmaps, parts, part_visibilities, image_ids],
+      batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps = tf.train.batch(
+        [cropped_images, heatmaps, parts, part_visibilities, image_ids, background_heatmaps],
         batch_size=batch_size,
         num_threads=num_threads,
         capacity= capacity, #batch_size * (num_threads + 2),
@@ -188,5 +189,5 @@ def input_nodes(
       )
 
   # return a batch of images and their labels
-  return batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids
+  return batched_images, batched_heatmaps, batched_parts, batched_part_visibilities, batched_image_ids, batched_background_heatmaps
 
