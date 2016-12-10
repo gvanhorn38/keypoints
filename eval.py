@@ -262,7 +262,9 @@ def eval(tfrecords, checkpoint_path, summary_dir, max_iterations, cfg):
 
       pred_coco = gt_coco.loadRes(pred_annotations)
 
-      cocoEval = COCOeval(gt_coco, pred_coco, iouType='keypoints')
+      # TODO: This should be added to the configuration
+      gt_sigmas = np.array([0.05] * cfg.PARTS.NUM_PARTS)
+      cocoEval = COCOeval(gt_coco, pred_coco, iouType='keypoints', sigmas=gt_sigmas)
 
       #cocoEval.params.useCats = 0
       #cocoEval.params.areaRange = ("medium","large") # I just created a different gt annotation file
