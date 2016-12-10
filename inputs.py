@@ -406,9 +406,9 @@ def build_heatmaps_etc_0(image, bboxes, all_parts, all_part_visibilities, part_s
   #heatmap_part_locs = np.array(heatmap_part_locs).astype(np.float32)
   return [cropped_bbox_images, all_heatmaps, heatmap_part_locs]
 
-def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, 
+def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sigmas, areas, scale_sigmas_by_area=False,
   input_size=256, heatmap_size=64, extract_centered_bbox=False, pad_percentage=0.25, left_right_pairs=None,
-  bg_add_target_left_right_pairs, bg_add_non_target_parts, bg_non_target_include_occluded, bg_add_non_target_left_right_pairs):
+  bg_add_target_left_right_pairs=True, bg_add_non_target_parts=True, bg_non_target_include_occluded=True, bg_add_non_target_left_right_pairs=True):
   """
   Args:
     image (uint8)
@@ -479,6 +479,9 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
     # Force the keypoints to lie on a pixel
     int_scaled_offset_parts = np.round(scaled_offset_parts).astype(int)
 
+    # If we are scaling the part sigmas, then compute the scale factor
+    sigma_scale = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2.
+
     for j in range(num_parts):
       ind = j * 2
       x, y = int_scaled_offset_parts[ind:ind+2]
@@ -487,8 +490,11 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
       if v > 0:
         # GVH: ignore the image scale issue, and use the sigmas directly
         #sigma_x = im_scale * heat_map_to_target_ratio * np.sqrt(area) * 2. * part_sigmas[j]
-        sigma_x = part_sigmas[j]
-        #sigma_x = 1.
+        if scale_sigmas_by_area:
+          sigma_x = sigma_scale * part_sigmas[j]
+        else:
+          sigma_x = part_sigmas[j]
+
         sigma_y = sigma_x 
         heat_map = two_d_gaussian(x, y, sigma_x, sigma_y, heatmap_size)
         
@@ -521,9 +527,7 @@ def build_heatmaps_etc(image, bboxes, all_parts, all_part_visibilities, part_sig
         other_parts = scaled_all_parts[other_indices]
         other_part_visibilities = all_part_visibilities[other_indices]
         other_areas = areas[other_indices]
-        others_background_heatmap += compute_background_heatmaps(bbox, other_parts, other_part_visibilities, im_scale * heat_map_to_target_ratio, part_sigmas, other_areas, heatmap_size=64, include_occluded=bg_non_target_include_occluded)
-        #background_heatmap *= -1.
-        #all_heatmaps[i] += background_heatmap
+        others_background_heatmap = compute_background_heatmaps(bbox, other_parts, other_part_visibilities, im_scale * heat_map_to_target_ratio, part_sigmas, other_areas, scale_sigmas_by_area, heatmap_size=64, include_occluded=bg_non_target_include_occluded)
       
       # Compute the left/right swaps for the background instances
       if bg_add_non_target_left_right_pairs:
@@ -567,7 +571,7 @@ def get_background_parts(bbox, instance_index, all_parts, all_part_visibilities)
   
   return overlapping_parts
 
-def compute_background_heatmaps(bbox, all_parts, all_part_visibilities, scaling_factor, part_sigmas, areas, heatmap_size=64, include_occluded=False):
+def compute_background_heatmaps(bbox, all_parts, all_part_visibilities, scaling_factor, part_sigmas, areas, scale_sigmas_by_area=False, heatmap_size=64, include_occluded=False):
   """
   Args:
     bbox : in image space
@@ -609,9 +613,10 @@ def compute_background_heatmaps(bbox, all_parts, all_part_visibilities, scaling_
         ind_2 = i * 2
         x, y = visible_parts[ind_2:ind_2+2]
         area = valid_areas[i]
-        # GVH: ignore the image scale issue, and use the sigmas directly
-        #sigma_x = scaling_factor * np.sqrt(area) * 2. * part_sigmas[j] #* 0.01
-        sigma_x = part_sigmas[j]
+        if scale_sigmas_by_area:
+          sigma_x = scaling_factor * np.sqrt(area) * 2.
+        else:
+          sigma_x = part_sigmas[j]
         sigma_y = sigma_x 
         heat_map = two_d_gaussian(x, y, sigma_x, sigma_y, heatmap_size)
         

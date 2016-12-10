@@ -144,7 +144,8 @@ def input_nodes(
     
     image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
     params = [
-      image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, False, 0, cfg.PARTS.LEFT_RIGHT_PAIRS, 
+      image, bboxes, parts, part_visibilities, cfg.PARTS.SIGMAS, areas, cfg.PARTS.SCALE_SIGMAS_BY_AREA, 
+      cfg.INPUT_SIZE, cfg.HEATMAP_SIZE, False, 0, cfg.PARTS.LEFT_RIGHT_PAIRS, 
       cfg.BACKGROUND_HEATMAPS.ADD_TARGET_LEFT_RIGHT_PAIRS, cfg.BACKGROUND_HEATMAPS.ADD_NON_TARGET_PARTS, 
       cfg.BACKGROUND_HEATMAPS.NON_TARGET_INCLUDE_OCCLUDED, cfg.BACKGROUND_HEATMAPS.ADD_NON_TARGET_LEFT_RIGHT_PAIRS
     ]

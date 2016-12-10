@@ -97,6 +97,8 @@ PARTS : {
    .089,
    .089
  ]
+
+ SCALE_SIGMAS_BY_AREA : false
 }
 
 HEATMAP_SIZE : 64
