@@ -1,7 +1,7 @@
 import tensorflow as tf
 slim = tf.contrib.slim
 
-def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summaries=True, cfg):
+def add_heatmaps_loss(gt_heatmaps, pred_heatmaps, background_heatmaps, add_summaries, cfg):
   """
   Args:
     gt_heatmaps : 

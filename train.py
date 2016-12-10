@@ -89,7 +89,7 @@ def train(tfrecords, logdir, cfg, pretrained_model_path=None):
         num_parts = cfg.PARTS.NUM_PARTS
       )
     
-      heatmap_loss, loss_summaries = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps, batched_background_heatmaps)
+      heatmap_loss, loss_summaries = loss.add_heatmaps_loss(batched_heatmaps, predicted_heatmaps, batched_background_heatmaps, True, cfg)
     
 
     total_loss = slim.losses.get_total_loss()
