@@ -239,7 +239,7 @@ def detect(tfrecords, checkpoint_path, save_dir, max_iterations, iterations_per_
               keypoints = get_local_maxima(heatmaps, bbox_x1, bbox_y1, input_size, input_size, image_width, image_height)
 
             # Convert to types that can be saved in the tfrecord file
-            image_id = int(np.asscalar(image_id))
+            image_id = np.asscalar(image_id) # this was used for coco data: int(np.asscalar(image_id))
             bbox = bbox.tolist()
             score = float(np.asscalar(score))
             label = int(np.asscalar(label))

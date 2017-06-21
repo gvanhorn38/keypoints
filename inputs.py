@@ -207,11 +207,19 @@ def extract_resized_crop_bboxes(image, bboxes, input_size=256):
       height_factor = new_width / float(bbox_w)
       new_height = int(np.round(bbox_h * height_factor))
       im_scale = height_factor
-  
-    im = imresize(
-      bbox_image,
-      (new_height, new_width)
-    )
+    
+
+    try:
+      im = imresize(
+        bbox_image,
+        (new_height, new_width)
+      )
+    except:
+      print "ERROR: bad bounding box! Check your data!"
+      print "IMAGE DIMS: %d x %d" % (image_height, image_width)
+      print "BBOX DIMS: %d x %d" % (bbox_h, bbox_w)
+      print "RESIZE DIMS: %d x %d" % (new_height, new_width)
+      raise
     im = np.pad(im, ((0,input_size - new_height), (0, input_size - new_width), (0, 0)), 'constant')
     #preped_images[i, 0:im.shape[0], 0:im.shape[1], :] = im
     
